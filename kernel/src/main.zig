@@ -17,6 +17,38 @@ inline fn done() noreturn {
     }
 }
 
+fn out_byte(port: u16, data: u8) void {
+    _ = asm volatile ("outb %al, %dx"
+        : [ret] "= {rax}" (-> usize),
+        : [port] "{dx}" (port),
+          [data] "{al}" (data),
+    );
+}
+
+fn serial_init() void {
+    const port: u16 = 0x3f8; // base IO port for the serial port
+    out_byte(port + 1, 0x00); // disable interrupts
+    out_byte(port + 3, 0x80); // set DLAB
+    out_byte(port + 0, 0x03); // set divisor (low byte)
+    out_byte(port + 1, 0x00); // set divisor (high byte)
+    out_byte(port + 3, 0x03); // clear DLAB, set character length to 8 bits, 1 stop bit, no parity bits
+    out_byte(port + 2, 0xC7); // enable and clear FIFO's, set interrupt trigger to highest value (this is not used)
+    out_byte(port + 4, 0x0F); // set DTR, RTS, OUT1, and OUT2
+}
+
+fn serial_print(text: []const u8) void {
+    for (text) |b| {
+        out_byte(0x03F8, b);
+    }
+}
+
+fn serial_println(text: []const u8) void {
+    for (text) |b| {
+        out_byte(0x03F8, b);
+    }
+    out_byte(0x03F8, '\n');
+}
+
 // The following will be our kernel's entry point.
 export fn _start() callconv(.C) noreturn {
     // Ensure the bootloader actually understands our base revision (see spec).
@@ -32,6 +64,9 @@ export fn _start() callconv(.C) noreturn {
 
         // Get the first framebuffer's information.
         const framebuffer = framebuffer_response.framebuffers()[0];
+
+        serial_init();
+        serial_println("Hello world!");
 
         for (0..100) |i| {
             // Calculate the pixel offset using the framebuffer information we obtained above.
