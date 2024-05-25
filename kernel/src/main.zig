@@ -36,10 +36,14 @@ fn serial_init() void {
     out_byte(port + 4, 0x0F); // set DTR, RTS, OUT1, and OUT2
 }
 
-fn serial_print(text: []const u8) void {
+const Context = struct {};
+const WriteError = error{};
+
+fn serial_print(_: Context, text: []const u8) WriteError!usize {
     for (text) |b| {
         out_byte(0x03F8, b);
     }
+    return text.len;
 }
 
 fn serial_println(text: []const u8) void {
@@ -67,6 +71,10 @@ export fn _start() callconv(.C) noreturn {
 
         serial_init();
         serial_println("Hello world!");
+
+        const serial_writer = std.io.GenericWriter(Context, WriteError, serial_print);
+
+        try std.fmt.format(serial_writer, "{}", .{9});
 
         for (0..100) |i| {
             // Calculate the pixel offset using the framebuffer information we obtained above.
