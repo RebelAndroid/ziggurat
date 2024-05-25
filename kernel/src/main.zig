@@ -72,9 +72,11 @@ export fn _start() callconv(.C) noreturn {
         serial_init();
         serial_println("Hello world!");
 
-        const serial_writer = std.io.GenericWriter(Context, WriteError, serial_print);
+        const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
+            .context = Context{},
+        };
 
-        try std.fmt.format(serial_writer, "{}", .{9});
+        try serial_writer.print("{}", .{9});
 
         for (0..100) |i| {
             // Calculate the pixel offset using the framebuffer information we obtained above.
