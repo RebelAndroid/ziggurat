@@ -33,6 +33,8 @@ pub fn build(b: *std.Build) void {
     kernel.root_module.addImport("limine", limine.module("limine"));
     kernel.setLinkerScriptPath(.{ .path = "linker.ld" });
 
+    kernel.pie = true;
+
     // Disable LTO. This prevents issues with limine requests
     kernel.want_lto = false;
 

@@ -25,6 +25,7 @@
               xorriso
               qemu
               parted
+              gdb
             ];
           };
         }
