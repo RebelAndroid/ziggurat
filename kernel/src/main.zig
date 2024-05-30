@@ -139,6 +139,17 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     try serial_writer.print("breakpoint!", .{});
 }
 
+extern fn lidt(u64) callconv(.C) void;
+comptime {
+    asm (
+        \\.globl lidt
+        \\.type lidt @function
+        \\lidt:
+        \\  lidtq (%rdi)
+        \\  retq
+    );
+}
+
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
     const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
         .context = Context{},
@@ -165,10 +176,12 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     IdtR.size = @sizeOf(@TypeOf(IDT)) - 1;
     IdtR.offset = @intFromPtr(&IDT);
 
-    try serial_writer.print("IDT  location: {X}\n", .{@intFromPtr(&IDT)});
-    try serial_writer.print("IDTr location: {X}\n", .{@intFromPtr(&IdtR)});
+    const x = @intFromPtr(&IdtR);
 
-    IdtDescriptor.load(0xFFFFFFFF80004B70);
+    try serial_writer.print("IDT  location: {X}\n", .{@intFromPtr(&IDT)});
+    try serial_writer.print("IDTr location: {X}\n", .{x});
+
+    lidt(x);
 
     try serial_writer.print("IDT descriptor loaded\n", .{});
 
