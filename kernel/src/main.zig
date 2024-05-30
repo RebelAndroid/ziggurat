@@ -78,14 +78,6 @@ var IDT: [256]IdtEntry = std.mem.zeroes([256]IdtEntry);
 const IdtDescriptor = packed struct {
     size: u16,
     offset: u64,
-    fn load(self: u64) void {
-        _ = asm volatile (
-            \\movq %[self], %rax
-            \\lidtq (%rax)
-            : [ret] "= {rax}" (-> usize),
-            : [self] "%[self]" (self),
-        );
-    }
 };
 
 var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
@@ -129,14 +121,18 @@ export fn page_fault_handler() callconv(.Interrupt) void {
     const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
         .context = Context{},
     };
-    try serial_writer.print("page fault!", .{});
+    const address = asm volatile (
+        \\movq %CR2, %rax
+        : [ret] "= {rax}" (-> usize),
+    );
+    try serial_writer.print("page fault! occured at address: 0x{X}\n", .{address});
 }
 
 export fn breakpoint_handler() callconv(.Interrupt) void {
     const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
         .context = Context{},
     };
-    try serial_writer.print("breakpoint!", .{});
+    try serial_writer.print("breakpoint!\n", .{});
 }
 
 extern fn lidt(u64) callconv(.C) void;
@@ -154,11 +150,11 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
         .context = Context{},
     };
-    try serial_writer.print("hhdm offset: {X}\n", .{hhdm_offset});
+    try serial_writer.print("hhdm offset: 0x{X}\n", .{hhdm_offset});
     for (memory_map_entries) |e| {
-        try serial_writer.print("base: {X}, length: {X}, kind: {}\n", .{ e.base, e.length, e.kind });
+        try serial_writer.print("base: 0x{X}, length: 0x{X}, kind: {}\n", .{ e.base, e.length, e.kind });
     }
-    try serial_writer.print("rdsp: {X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
+    try serial_writer.print("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
 
     var breakpoint_entry: IdtEntry = .{
         .segment_selector = (5 << 3),
@@ -167,25 +163,29 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         .dpl = 0,
     };
     breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
-    try serial_writer.print("breakpoint_handler: {X}\n", .{@intFromPtr(&breakpoint_handler)});
-    try serial_writer.print("offset: {X}\n", .{breakpoint_entry.getOffset()});
-    try serial_writer.print("offset parts: {X}, {X}\n", .{ breakpoint_entry.offset1, breakpoint_entry.offset2 });
+
+    var page_fault_entry: IdtEntry = .{
+        .segment_selector = (5 << 3),
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
 
     IDT[3] = breakpoint_entry;
+    IDT[0xE] = page_fault_entry;
 
     IdtR.size = @sizeOf(@TypeOf(IDT)) - 1;
     IdtR.offset = @intFromPtr(&IDT);
 
     const x = @intFromPtr(&IdtR);
-
-    try serial_writer.print("IDT  location: {X}\n", .{@intFromPtr(&IDT)});
-    try serial_writer.print("IDTr location: {X}\n", .{x});
-
     lidt(x);
 
-    try serial_writer.print("IDT descriptor loaded\n", .{});
-
     breakpoint();
+
+    // This triggers a page fault
+    const y: u8 = @as(*u8, @ptrFromInt(69)).*;
+    try serial_writer.print("69: {}", .{y});
 
     done();
 }
