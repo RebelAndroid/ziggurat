@@ -160,14 +160,20 @@ const FrameAllocator = struct {
             const node_ptr: *FrameAllocatorNode = @ptrFromInt(start + self.hhdm_offset);
             node_ptr.* = node;
         } else {
-            // TODO: linked list has elements
-            done();
+            const node = FrameAllocatorNode{
+                .size = size,
+                .next = self.front,
+            };
+            const node_ptr: *FrameAllocatorNode = @ptrFromInt(start + self.hhdm_offset);
+            node_ptr.* = node;
+            // add the new node to the front of the list
+            self.front = start;
         }
     }
     fn allocate_frame(self: *FrameAllocator) u64 {
         if (self.front == 0) {
             // linked list is empty, big sad
-            return 0; // TODO: actual errors
+            return 0; // TODO: actual errors?
         }
         const node_ptr: *FrameAllocatorNode = @ptrFromInt(self.front + self.hhdm_offset);
         node_ptr.size -= 1;
@@ -225,9 +231,20 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     var frame_allocator = FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
-    frame_allocator.free_frames(0x1000, 1);
-    const out = frame_allocator.allocate_frame();
-    try serial_writer.print("got frame: {X}\n", .{out});
+
+    for (memory_map_entries) |e| {
+        if (e.kind != limine.MemoryMapEntryType.usable) {
+            continue;
+        }
+        frame_allocator.free_frames(e.base, e.length / 0x1000);
+    }
+
+    while (true) {
+        const frame = frame_allocator.allocate_frame();
+        if (frame == 0) {
+            break;
+        }
+    }
 
     try serial_writer.print("done", .{});
 
