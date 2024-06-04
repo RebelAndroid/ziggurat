@@ -1,5 +1,8 @@
 const limine = @import("limine");
 const std = @import("std");
+const pmm = @import("pmm.zig");
+const reg = @import("x64/registers.zig");
+const paging = @import("x64/page_table.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -146,151 +149,6 @@ comptime {
     );
 }
 
-const FrameAllocator = struct {
-    front: u64 = 0,
-    hhdm_offset: u64,
-    fn free_frames(self: *FrameAllocator, start: u64, size: u64) void {
-        if (self.front == 0) {
-            // linked list is empty
-            self.front = start;
-            const node = FrameAllocatorNode{
-                .size = size,
-                .next = 0,
-            };
-            const node_ptr: *FrameAllocatorNode = @ptrFromInt(start + self.hhdm_offset);
-            node_ptr.* = node;
-        } else {
-            const node = FrameAllocatorNode{
-                .size = size,
-                .next = self.front,
-            };
-            const node_ptr: *FrameAllocatorNode = @ptrFromInt(start + self.hhdm_offset);
-            node_ptr.* = node;
-            // add the new node to the front of the list
-            self.front = start;
-        }
-    }
-    fn allocate_frame(self: *FrameAllocator) u64 {
-        if (self.front == 0) {
-            // linked list is empty, big sad
-            return 0; // TODO: actual errors?
-        }
-        const node_ptr: *FrameAllocatorNode = @ptrFromInt(self.front + self.hhdm_offset);
-        node_ptr.size -= 1;
-        // return the last frame in this node
-        const out = self.front + 0x1000 * node_ptr.size;
-        if (node_ptr.size == 0) {
-            // if the node has no more pages left, remove it
-            self.front = node_ptr.next;
-        }
-        return out;
-    }
-};
-const FrameAllocatorNode = packed struct {
-    size: u64 = 0,
-    next: u64 = 0,
-};
-
-const CR3 = packed struct {
-    _1: u3,
-    pwt: u1,
-    pcd: u1,
-    _2: u7,
-    pml4: u52,
-};
-
-extern fn get_cr3() callconv(.C) u64;
-extern fn set_cr3(u64) callconv(.C) void;
-comptime {
-    asm (
-        \\.globl get_cr3
-        \\.type get_cr3 @function
-        \\get_cr3:
-        \\  movq %cr3, %rax
-        \\  retq
-        \\.globl set_cr3
-        \\.type set_cr3 @function
-        \\set_cr3:
-        \\  movq %rdi, %cr3
-        \\  retq
-    );
-}
-
-/// packed struct representing CR4 values
-/// more info at Intel Software Developer's Manual Vol. 3A 2-17
-const CR4 = packed struct {
-    /// Virtual-8086 Mode Extensions: enables interrupt and exceptions handling extensions in virtual-8086 mode
-    vme: bool,
-    /// Protected-Mode Virtual Interrupts: enables virtual interrupt flag in protected mode
-    pvi: bool,
-    /// Time Stamp Disable: restricts execution of RDTSC instruction to ring 0 (also applies to RDTSCP if available)
-    tsd: bool,
-    /// Debug Extensions: ?
-    de: bool,
-    /// Page Size Extensions: enables 4MB pages with 32 bit paging
-    pse: bool,
-    /// Physical Address Extension: Allows paging for physical addresses larger than 32 bits, must be set for long mode paging (IA-32e)
-    pae: bool,
-    /// Machine-Check Enable: enables the machine-check exception
-    mce: bool,
-    /// Page Global Enable: enables global pages
-    pge: bool,
-    /// Performance-Monitoring Counter Enable: allows RDPMC instruction to execute at any privilege level (only in ring 0 if clear)
-    pce: bool,
-    /// Operating System Support For FXSAVE and FXRSTOR instructions: enables FXSAVE and FXSTOR,
-    /// allows the processor to execute most SSE/SSE2/SSE3/SSSE3/SSE4 (others always available)
-    osfxsr: bool,
-    /// Operating System Support for Unmasked SIMD Floating-Point Exceptions: indicates support for handling unmasked SIMD floating-point exceptions
-    osxmmexcpt: bool,
-    /// User-Mode Instruction Prevention: prevents rings > 0 from executing SGDT, SIDT, SMSW, and STR
-    umip: bool,
-    /// 57-bit linear addresses: enables 5-level paging (57 bit virtual addresses)
-    la57: bool,
-    /// VMX-Enable: enables VMX
-    vmxe: bool,
-    /// SMX-Enable: enables SMX
-    smxe: bool,
-    _2: bool,
-    /// FSGSBASE-Enable: enables RDFSBASE, RDGSBASE, WRFSBASE, and WRGSBASE
-    fsgsbase: bool,
-    /// PCID-Enable: enables process-context identifiers
-    pcide: bool,
-    /// Enables XSAVE, XRSTOR, XGETBV, and XSETBV
-    osxsave: bool,
-    /// Key-Locker-Enable: enables LOADIWKEY
-    kl: bool,
-    /// SMEP-Enable: enables supervisor-mode execution prevention
-    smep: bool,
-    /// SMAP-Enable: enables supervisor-mode access prevention
-    smap: bool,
-    /// Enable protection keys for user-mode pages: ?
-    pke: bool,
-    /// Control-Flow Enforcement Technology: enables CET when set
-    cet: bool,
-    /// Enable protection keys for supervisor-mode pages
-    pks: bool,
-    /// User Interrupts Enable: enables user interrupts
-    uintr: bool,
-    _4: u38,
-};
-
-extern fn get_cr4() callconv(.C) u64;
-extern fn set_cr4(u64) callconv(.C) void;
-comptime {
-    asm (
-        \\.globl get_cr4
-        \\.type get_cr4 @function
-        \\get_cr4:
-        \\  movq %cr4, %rax
-        \\  retq
-        \\.globl set_cr4
-        \\.type set_cr4 @function
-        \\set_cr4:
-        \\  movq %rdi, %cr4
-        \\  retq
-    );
-}
-
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
     const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
         .context = Context{},
@@ -328,7 +186,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
 
     breakpoint();
 
-    var frame_allocator = FrameAllocator{
+    var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
 
@@ -339,10 +197,10 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
-    const cr3: CR3 = @bitCast(get_cr3());
+    const cr3: reg.CR3 = @bitCast(reg.get_cr3());
     try serial_writer.print("cr3: {X}\n", .{cr3.pml4 << 12});
 
-    const cr4: CR4 = @bitCast(get_cr4());
+    const cr4: reg.CR4 = @bitCast(reg.get_cr4());
     try serial_writer.print("cr4: {}\n", .{cr4});
 
     try serial_writer.print("done", .{});
