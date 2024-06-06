@@ -38,6 +38,9 @@ run-hdd: $(IMAGE_NAME).hdd
 run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 	qemu-system-x86_64 -M q35 -m 2G -bios ovmf/OVMF.fd -hda $(IMAGE_NAME).hdd
 
+zig-test: kernel/src/x64/page_table.zig
+	zig test $^
+
 ovmf:
 	mkdir -p ovmf
 	cd ovmf && curl -Lo OVMF.fd https://retrage.github.io/edk2-nightly/bin/RELEASEX64_OVMF.fd

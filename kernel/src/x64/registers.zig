@@ -4,9 +4,12 @@ pub const CR3 = packed struct {
     pcd: u1,
     _2: u7,
     pml4: u52,
+    pub fn get_pml4(self: CR3) u64 {
+        return @as(u64, self.pml4) << 12;
+    }
 };
 
-pub extern fn get_cr3() callconv(.C) u64;
+pub extern fn get_cr3() callconv(.C) CR3;
 pub extern fn set_cr3(u64) callconv(.C) void;
 comptime {
     asm (

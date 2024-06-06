@@ -197,11 +197,17 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
-    const cr3: reg.CR3 = @bitCast(reg.get_cr3());
-    try serial_writer.print("cr3: {X}\n", .{cr3.pml4 << 12});
+    const cr3: reg.CR3 = reg.get_cr3();
+    try serial_writer.print("PML4 physical address: {X}\n", .{cr3.get_pml4()});
+    const pml4: *paging.PML4 = @ptrFromInt(cr3.get_pml4() + hhdm_offset);
+    for (pml4) |entry| {
+        if (entry.present) {
+            try serial_writer.print("PML4 entry: {}\n", .{entry});
+        }
+    }
 
-    const cr4: reg.CR4 = @bitCast(reg.get_cr4());
-    try serial_writer.print("cr4: {}\n", .{cr4});
+    // const cr4: reg.CR4 = @bitCast(reg.get_cr4());
+    // try serial_writer.print("cr4: {}\n", .{cr4});
 
     try serial_writer.print("done", .{});
 
