@@ -24,6 +24,9 @@ pub const PML4E = packed struct {
     pdpt: u40,
     _5: u11 = 0,
     execute_disable: bool,
+    pub fn get_pdpt(self: PML4E) u64 {
+        return @as(u64, self.pdpt) << 12;
+    }
 };
 
 pub const PML4: type = [512]PML4E;
@@ -89,11 +92,17 @@ pub const PDPTE_PD = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
+    pub fn get_page_directory(self: PDPTE_PD) u64 {
+        return @as(u64, self.page_directory) << 12;
+    }
 };
 
 pub const PDPTE = packed union {
     huge_page: PDPTE_1GB,
     page_directory: PDPTE_PD,
+    pub fn is_huge_page(self: PDPTE) bool {
+        return self.huge_page.page_size;
+    }
 };
 
 /// Page Directory Pointer Table
@@ -160,15 +169,21 @@ pub const PDE_PT = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
+    pub fn get_page_table(self: PDE_PT) u64 {
+        return @as(u64, self.page_table) << 12;
+    }
 };
 
 pub const PDE = packed union {
     huge_page: PDE_2MB,
     page_table: PDE_PT,
+    pub fn is_huge_page(self: PDE) bool {
+        return self.huge_page.page_size;
+    }
 };
 
 /// Page Directory
-const PD: type = [512]PDE;
+pub const PD: type = [512]PDE;
 
 /// Page Table Entry, always maps a 4kb page
 pub const PTE = packed struct {
@@ -201,7 +216,16 @@ pub const PTE = packed struct {
     execute_disable: bool,
 };
 
-const PT: type = [512]PTE;
+pub const PT: type = [512]PTE;
+
+pub const VirtualAddress = packed struct {
+    page_offset: u12,
+    table: u9,
+    directory: u9,
+    directory_pointer: u9,
+    pml4: u9,
+    sign_extension: u16,
+};
 
 test "Paging Structure Sizes" {
     // Sizes of entries
@@ -217,4 +241,7 @@ test "Paging Structure Sizes" {
     try std.testing.expectEqual(4096, @sizeOf(PDPT));
     try std.testing.expectEqual(4096, @sizeOf(PD));
     try std.testing.expectEqual(4096, @sizeOf(PT));
+
+    // Size of VirtualAddress
+    try std.testing.expectEqual(64, @bitSizeOf(VirtualAddress));
 }

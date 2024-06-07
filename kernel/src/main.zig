@@ -199,12 +199,14 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
 
     const cr3: reg.CR3 = reg.get_cr3();
     try serial_writer.print("PML4 physical address: {X}\n", .{cr3.get_pml4()});
-    const pml4: *paging.PML4 = @ptrFromInt(cr3.get_pml4() + hhdm_offset);
-    for (pml4) |entry| {
-        if (entry.present) {
-            try serial_writer.print("PML4 entry: {}\n", .{entry});
-        }
-    }
+    // const pml4: *paging.PML4 = @ptrFromInt(cr3.get_pml4() + hhdm_offset);
+    // for (pml4) |entry| {
+    //     if (entry.present) {
+    //         try serial_writer.print("PML4 entry: {}\n", .{entry});
+    //     }
+    // }
+    const p = cr3.translate(@bitCast(@intFromPtr(&IdtR)), hhdm_offset);
+    try serial_writer.print("physical address: 0x{X}\n", .{p});
 
     // const cr4: reg.CR4 = @bitCast(reg.get_cr4());
     // try serial_writer.print("cr4: {}\n", .{cr4});

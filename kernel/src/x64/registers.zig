@@ -1,3 +1,5 @@
+const page_table = @import("page_table.zig");
+
 pub const CR3 = packed struct {
     _1: u3,
     pwt: u1,
@@ -6,6 +8,33 @@ pub const CR3 = packed struct {
     pml4: u52,
     pub fn get_pml4(self: CR3) u64 {
         return @as(u64, self.pml4) << 12;
+    }
+    pub fn translate(self: CR3, addr: page_table.VirtualAddress, hhdm_offset: u64) u64 {
+        const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
+        const pml4e = pml4[addr.pml4];
+        if (!pml4e.present) {
+            return 0;
+        }
+
+        const pdpt: *page_table.PDPT = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
+        const pdpte = pdpt[addr.directory_pointer];
+        if (!pdpte.huge_page.present) {
+            return 0;
+        }
+        if (pdpte.is_huge_page()) {
+            // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
+            return (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+        } else {
+            const pd: *page_table.PD = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
+            const pde = pd[addr.directory];
+            if (pde.is_huge_page()) {
+                return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+            } else {
+                const pt: *page_table.PT = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
+                const pte = pt[addr.table];
+                return (@as(u64, pte.page) << 12) + addr.page_offset;
+            }
+        }
     }
 };
 
