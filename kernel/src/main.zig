@@ -85,6 +85,10 @@ const IdtDescriptor = packed struct {
 
 var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
 
+pub const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
+    .context = Context{},
+};
+
 // The following will be our kernel's entry point.
 export fn _start() callconv(.C) noreturn {
     // Ensure the bootloader actually understands our base revision (see spec).
@@ -93,9 +97,6 @@ export fn _start() callconv(.C) noreturn {
     }
     serial_init();
 
-    const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-        .context = Context{},
-    };
     // Ensure we got a framebuffer.
     if (framebuffer_request.response) |framebuffer_response| {
         if (framebuffer_response.framebuffer_count < 1) {
@@ -121,9 +122,6 @@ export fn _start() callconv(.C) noreturn {
 }
 
 export fn page_fault_handler() callconv(.Interrupt) void {
-    const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-        .context = Context{},
-    };
     const address = asm volatile (
         \\movq %CR2, %rax
         : [ret] "= {rax}" (-> usize),
@@ -132,9 +130,6 @@ export fn page_fault_handler() callconv(.Interrupt) void {
 }
 
 export fn breakpoint_handler() callconv(.Interrupt) void {
-    const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-        .context = Context{},
-    };
     try serial_writer.print("breakpoint!\n", .{});
 }
 
@@ -150,9 +145,6 @@ comptime {
 }
 
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
-    const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-        .context = Context{},
-    };
     try serial_writer.print("hhdm offset: 0x{X}\n", .{hhdm_offset});
     for (memory_map_entries) |e| {
         try serial_writer.print("base: 0x{X}, length: 0x{X}, kind: {}\n", .{ e.base, e.length, e.kind });
@@ -199,17 +191,19 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
 
     const cr3: reg.CR3 = reg.get_cr3();
     try serial_writer.print("PML4 physical address: {X}\n", .{cr3.get_pml4()});
-    // const pml4: *paging.PML4 = @ptrFromInt(cr3.get_pml4() + hhdm_offset);
-    // for (pml4) |entry| {
-    //     if (entry.present) {
-    //         try serial_writer.print("PML4 entry: {}\n", .{entry});
-    //     }
-    // }
+
     const p = cr3.translate(@bitCast(@intFromPtr(&IdtR)), hhdm_offset);
     try serial_writer.print("physical address: 0x{X}\n", .{p});
 
-    // const cr4: reg.CR4 = @bitCast(reg.get_cr4());
-    // try serial_writer.print("cr4: {}\n", .{cr4});
+    const page = paging.Page{
+        .four_kb = @bitCast(hhdm_offset - 0x8000),
+    };
+
+    const result = cr3.map(page, 0x1000, hhdm_offset, &frame_allocator);
+    try serial_writer.print("result: {!}\n", .{result});
+
+    const p2 = cr3.translate(@bitCast(hhdm_offset - 0x8000), hhdm_offset);
+    try serial_writer.print("physical address: 0x{X}\n", .{p2});
 
     try serial_writer.print("done", .{});
 

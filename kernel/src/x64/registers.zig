@@ -1,4 +1,6 @@
 const page_table = @import("page_table.zig");
+const pmm = @import("../pmm.zig");
+const serial_writer = @import("../main.zig").serial_writer;
 
 pub const CR3 = packed struct {
     _1: u3,
@@ -13,13 +15,13 @@ pub const CR3 = packed struct {
         const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
         const pml4e = pml4[addr.pml4];
         if (!pml4e.present) {
-            return 0;
+            return 1;
         }
 
         const pdpt: *page_table.PDPT = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
         const pdpte = pdpt[addr.directory_pointer];
         if (!pdpte.huge_page.present) {
-            return 0;
+            return 2;
         }
         if (pdpte.is_huge_page()) {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
@@ -27,14 +29,152 @@ pub const CR3 = packed struct {
         } else {
             const pd: *page_table.PD = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
             const pde = pd[addr.directory];
+            if (!pde.huge_page.present) {
+                return 3;
+            }
             if (pde.is_huge_page()) {
                 return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
             } else {
                 const pt: *page_table.PT = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
                 const pte = pt[addr.table];
+                if (!pte.present) {
+                    return 4;
+                }
                 return (@as(u64, pte.page) << 12) + addr.page_offset;
             }
         }
+    }
+
+    const MapError = error{
+        /// Indicates that a virtual address has already been mapped
+        AlreadyPresent,
+        Unaligned,
+        NoMemory,
+    };
+
+    pub fn map(self: CR3, page: page_table.Page, physical_address: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) MapError!void {
+        try serial_writer.print("inside map\n", .{});
+        const addr = switch (page) {
+            .four_kb => |virt| virt,
+            .two_mb => |virt| virt,
+            .one_gb => |virt| virt,
+        };
+        const page_type = switch (page) {
+            .four_kb => page_table.PageType.four_kb,
+            .two_mb => page_table.PageType.two_mb,
+            .one_gb => page_table.PageType.one_gb,
+        };
+        const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
+        var pml4e = pml4[addr.pml4];
+        if (!pml4e.present) {
+            // we need to create a new pml4e pointing to a new pdpte
+            // allocate frame for new pdpte, this is zeroed by the allocator so it contains no valid entries
+            const frame = frame_allocator.allocate_frame();
+            if (frame == 0) {
+                return MapError.NoMemory;
+            }
+            pml4e = page_table.PML4E{
+                .present = true,
+                .read_write = true,
+                .user_supervisor = false,
+                .pwt = false,
+                .pcd = false,
+                .accessed = false,
+                .execute_disable = false,
+            };
+            pml4e.set_pdpt(frame);
+        }
+        // we now have a valid pml4e
+        const pdpt: *page_table.PDPT = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
+        var pdpte: *volatile page_table.PDPTE = &pdpt[addr.directory_pointer];
+        if (page_type == page_table.PageType.one_gb) {
+            if (pdpte.huge_page.present) {
+                return MapError.AlreadyPresent;
+            }
+            pdpte.huge_page = page_table.PDPTE_1GB{
+                .present = true,
+                .read_write = true,
+                .user_supervisor = false,
+                .pwt = false,
+                .pcd = false,
+                .execute_disable = false,
+            };
+            if (physical_address & 0x3FFFFFFF != 0) {
+                return MapError.Unaligned;
+            }
+            pdpte.huge_page.set_page(physical_address);
+            return;
+        }
+        if (!pdpte.page_directory.present) {
+            // if we don't have a page directory to reference, we need to create a new one
+            const frame = frame_allocator.allocate_frame();
+            if (frame == 0) {
+                return MapError.NoMemory;
+            }
+            pdpte.page_directory = page_table.PDPTE_PD{
+                .present = true,
+                .read_write = true,
+                .user_supervisor = false,
+                .pwt = false,
+                .pcd = false,
+                .accessed = false,
+                .execute_disable = false,
+            };
+            pdpte.page_directory.set_page_directory(frame);
+        }
+        // we now have a valid pdpte
+        const pd: *page_table.PD = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
+        var pde: *volatile page_table.PDE = &pd[addr.directory];
+        if (page_type == page_table.PageType.two_mb) {
+            if (pde.huge_page.present) {
+                return MapError.AlreadyPresent;
+            }
+            pde.huge_page = page_table.PDE_2MB{
+                .present = true,
+                .read_write = true,
+                .user_supervisor = false,
+                .pwt = false,
+                .pcd = false,
+                .accessed = false,
+                .execute_disable = false,
+            };
+            pde.huge_page.set_page(physical_address);
+            return;
+        }
+        if (!pde.page_table.present) {
+            // if we don't have a page table to reference, we need to create a new one
+            const frame = frame_allocator.allocate_frame();
+            if (frame == 0) {
+                return MapError.NoMemory;
+            }
+            pde.page_table = page_table.PDE_PT{
+                .present = true,
+                .read_write = true,
+                .user_supervisor = false,
+                .pwt = false,
+                .pcd = false,
+                .accessed = false,
+                .execute_disable = false,
+            };
+            pde.page_table.set_page_table(frame);
+        }
+        // we now have a valid pde, additionally, we are mapping a 4kb page
+        const pt: *page_table.PT = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
+        var pte: *volatile page_table.PTE = &pt[addr.table];
+        if (pte.present) {
+            return MapError.AlreadyPresent;
+        }
+        pte.* = page_table.PTE{
+            .present = true,
+            .read_write = true,
+            .user_supervisor = false,
+            .pwt = false,
+            .pcd = false,
+            .accessed = false,
+            .execute_disable = false,
+        };
+        pte.set_page(physical_address);
+        return;
     }
 };
 

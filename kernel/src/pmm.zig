@@ -22,6 +22,7 @@ pub const FrameAllocator = struct {
             self.front = start;
         }
     }
+    /// Allocates a new frame, the frame is cleared before being returned
     pub fn allocate_frame(self: *FrameAllocator) u64 {
         if (self.front == 0) {
             // linked list is empty, big sad
@@ -35,6 +36,10 @@ pub const FrameAllocator = struct {
             // if the node has no more pages left, remove it
             self.front = node_ptr.next;
         }
+
+        const out_ptr: *[4096]u8 = @ptrFromInt(out + self.hhdm_offset);
+        @memset(out_ptr, 0);
+
         return out;
     }
 };
