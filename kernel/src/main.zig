@@ -3,6 +3,7 @@ const std = @import("std");
 const pmm = @import("pmm.zig");
 const reg = @import("x64/registers.zig");
 const paging = @import("x64/page_table.zig");
+const cpuid = @import("x64/cpuid.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -16,6 +17,20 @@ pub export var rdsp_request: limine.RsdpRequest = .{};
 // base revision described by the Limine boot protocol specification.
 // See specification for further info.
 pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
+
+pub const std_options = .{
+    .log_level = .info,
+    .logFn = serial_log,
+};
+
+pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+    const scope_name = @tagName(scope);
+    const level_name = level.asText();
+    try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
+    try serial_writer.print(format, args);
+}
+
+const main_log = std.log.scoped(.main);
 
 inline fn done() noreturn {
     while (true) {
@@ -85,7 +100,7 @@ const IdtDescriptor = packed struct {
 
 var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
 
-pub const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
+const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
     .context = Context{},
 };
 
@@ -100,7 +115,7 @@ export fn _start() callconv(.C) noreturn {
     // Ensure we got a framebuffer.
     if (framebuffer_request.response) |framebuffer_response| {
         if (framebuffer_response.framebuffer_count < 1) {
-            _ = try serial_writer.write("framebuffer response had no framebuffers\n");
+            main_log.err("frame buffer response had no framebuffers", .{});
             done();
         }
 
@@ -126,11 +141,11 @@ export fn page_fault_handler() callconv(.Interrupt) void {
         \\movq %CR2, %rax
         : [ret] "= {rax}" (-> usize),
     );
-    try serial_writer.print("page fault! occured at address: 0x{X}\n", .{address});
+    main_log.err("page fault! occured at address: 0x{X}\n", .{address});
 }
 
 export fn breakpoint_handler() callconv(.Interrupt) void {
-    try serial_writer.print("breakpoint!\n", .{});
+    main_log.info("breakpoint!\n", .{});
 }
 
 extern fn lidt(u64) callconv(.C) void;
@@ -145,11 +160,11 @@ comptime {
 }
 
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
-    try serial_writer.print("hhdm offset: 0x{X}\n", .{hhdm_offset});
+    main_log.info("hhdm offset: 0x{X}\n", .{hhdm_offset});
     for (memory_map_entries) |e| {
-        try serial_writer.print("base: 0x{X}, length: 0x{X}, kind: {}\n", .{ e.base, e.length, e.kind });
+        main_log.info("base: 0x{X}, length: 0x{X}, kind: {}\n", .{ e.base, e.length, e.kind });
     }
-    try serial_writer.print("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
+    main_log.info("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
 
     var breakpoint_entry: IdtEntry = .{
         .segment_selector = (5 << 3),
@@ -189,30 +204,9 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
-    const cr3: reg.CR3 = reg.get_cr3();
-    try serial_writer.print("PML4 physical address: {X}\n", .{cr3.get_pml4()});
+    main_log.info("vendor string: {s}\n", .{cpuid.get_vendor_string()});
 
-    // const page = paging.Page{
-    //     .four_kb = @bitCast(hhdm_offset - 0x8000),
-    // };
-
-    // const result = cr3.map(page, 0x1000, hhdm_offset, &frame_allocator);
-    // try serial_writer.print("result: {!}\n", .{result});
-
-    const p = cr3.translate(@bitCast(hhdm_offset + 0x1000), hhdm_offset);
-    try serial_writer.print("physical address: 0x{X}\n", .{p});
-
-    const page2 = paging.Page{
-        .four_kb = @bitCast(hhdm_offset + 0x1000),
-    };
-
-    const result2 = cr3.map(page2, 0x2000, hhdm_offset, &frame_allocator);
-    try serial_writer.print("result: {!}\n", .{result2});
-
-    const p2 = cr3.translate(@bitCast(hhdm_offset + 0x1000), hhdm_offset);
-    try serial_writer.print("physical address: 0x{X}\n", .{p2});
-
-    try serial_writer.print("done", .{});
+    main_log.info("done", .{});
 
     done();
 }
