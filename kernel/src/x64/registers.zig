@@ -18,6 +18,7 @@ pub const CR3 = packed struct {
             return 1;
         }
 
+        try serial_writer.print("using page directory pointer table at: 0x{X}\n", .{pml4e.get_pdpt()});
         const pdpt: *page_table.PDPT = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
         const pdpte = pdpt[addr.directory_pointer];
         if (!pdpte.huge_page.present) {
@@ -27,6 +28,7 @@ pub const CR3 = packed struct {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
             return (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
         } else {
+            try serial_writer.print("using page directory at: 0x{X}\n", .{pdpte.page_directory.get_page_directory()});
             const pd: *page_table.PD = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
             const pde = pd[addr.directory];
             if (!pde.huge_page.present) {
@@ -35,6 +37,7 @@ pub const CR3 = packed struct {
             if (pde.is_huge_page()) {
                 return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
             } else {
+                try serial_writer.print("using page table at: 0x{X}\n", .{pde.page_table.get_page_table()});
                 const pt: *page_table.PT = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
                 const pte = pt[addr.table];
                 if (!pte.present) {
@@ -67,12 +70,13 @@ pub const CR3 = packed struct {
         const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
         var pml4e = pml4[addr.pml4];
         if (!pml4e.present) {
-            // we need to create a new pml4e pointing to a new pdpte
-            // allocate frame for new pdpte, this is zeroed by the allocator so it contains no valid entries
+            // we need to create a new pml4e pointing to a new pdpt
+            // allocate frame for new pdpt, this is zeroed by the allocator so it contains no valid entries
             const frame = frame_allocator.allocate_frame();
             if (frame == 0) {
                 return MapError.NoMemory;
             }
+            try serial_writer.print("allocating new PDPT at frame: 0x{}", .{frame});
             pml4e = page_table.PML4E{
                 .present = true,
                 .read_write = true,
@@ -85,9 +89,11 @@ pub const CR3 = packed struct {
             pml4e.set_pdpt(frame);
         }
         // we now have a valid pml4e
+        try serial_writer.print("using page directory pointer table at: 0x{X}\n", .{pml4e.get_pdpt()});
         const pdpt: *page_table.PDPT = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
         var pdpte: *volatile page_table.PDPTE = &pdpt[addr.directory_pointer];
         if (page_type == page_table.PageType.one_gb) {
+            try serial_writer.print("mapping 1GB page", .{});
             if (pdpte.huge_page.present) {
                 return MapError.AlreadyPresent;
             }
@@ -111,6 +117,7 @@ pub const CR3 = packed struct {
             if (frame == 0) {
                 return MapError.NoMemory;
             }
+            try serial_writer.print("allocating new PDPT at frame: 0x{}", .{frame});
             pdpte.page_directory = page_table.PDPTE_PD{
                 .present = true,
                 .read_write = true,
@@ -122,10 +129,17 @@ pub const CR3 = packed struct {
             };
             pdpte.page_directory.set_page_directory(frame);
         }
+        if (pdpte.is_huge_page()) {
+            // we are trying to map a smaller page that is part of an already mapped huge page
+            return MapError.AlreadyPresent;
+        }
         // we now have a valid pdpte
+        try serial_writer.print("using page directory at: 0x{X}\n", .{pdpte.page_directory.get_page_directory()});
         const pd: *page_table.PD = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
         var pde: *volatile page_table.PDE = &pd[addr.directory];
+        try serial_writer.print("pde: {}\n", .{pde.page_table});
         if (page_type == page_table.PageType.two_mb) {
+            try serial_writer.print("mapping 2MB page", .{});
             if (pde.huge_page.present) {
                 return MapError.AlreadyPresent;
             }
@@ -147,6 +161,7 @@ pub const CR3 = packed struct {
             if (frame == 0) {
                 return MapError.NoMemory;
             }
+            try serial_writer.print("allocating new PT at frame: 0x{}", .{frame});
             pde.page_table = page_table.PDE_PT{
                 .present = true,
                 .read_write = true,
@@ -158,7 +173,12 @@ pub const CR3 = packed struct {
             };
             pde.page_table.set_page_table(frame);
         }
+        if (pde.is_huge_page()) {
+            // we are trying to map a smaller page that is part of an already mapped huge page
+            return MapError.AlreadyPresent;
+        }
         // we now have a valid pde, additionally, we are mapping a 4kb page
+        try serial_writer.print("using page table at: 0x{X}\n", .{pde.page_table.get_page_table()});
         const pt: *page_table.PT = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
         var pte: *volatile page_table.PTE = &pt[addr.table];
         if (pte.present) {

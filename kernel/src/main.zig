@@ -192,17 +192,24 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     const cr3: reg.CR3 = reg.get_cr3();
     try serial_writer.print("PML4 physical address: {X}\n", .{cr3.get_pml4()});
 
-    const p = cr3.translate(@bitCast(@intFromPtr(&IdtR)), hhdm_offset);
+    // const page = paging.Page{
+    //     .four_kb = @bitCast(hhdm_offset - 0x8000),
+    // };
+
+    // const result = cr3.map(page, 0x1000, hhdm_offset, &frame_allocator);
+    // try serial_writer.print("result: {!}\n", .{result});
+
+    const p = cr3.translate(@bitCast(hhdm_offset + 0x1000), hhdm_offset);
     try serial_writer.print("physical address: 0x{X}\n", .{p});
 
-    const page = paging.Page{
-        .four_kb = @bitCast(hhdm_offset - 0x8000),
+    const page2 = paging.Page{
+        .four_kb = @bitCast(hhdm_offset + 0x1000),
     };
 
-    const result = cr3.map(page, 0x1000, hhdm_offset, &frame_allocator);
-    try serial_writer.print("result: {!}\n", .{result});
+    const result2 = cr3.map(page2, 0x2000, hhdm_offset, &frame_allocator);
+    try serial_writer.print("result: {!}\n", .{result2});
 
-    const p2 = cr3.translate(@bitCast(hhdm_offset - 0x8000), hhdm_offset);
+    const p2 = cr3.translate(@bitCast(hhdm_offset + 0x1000), hhdm_offset);
     try serial_writer.print("physical address: 0x{X}\n", .{p2});
 
     try serial_writer.print("done", .{});
