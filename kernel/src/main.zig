@@ -191,7 +191,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     const x = @intFromPtr(&IdtR);
     lidt(x);
 
-    breakpoint();
+    //breakpoint();
 
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
@@ -205,6 +205,9 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     }
 
     main_log.info("vendor string: {s}\n", .{cpuid.get_vendor_string()});
+
+    const features = cpuid.get_features1();
+    main_log.info("features: {}\n", .{features});
 
     main_log.info("done", .{});
 

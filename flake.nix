@@ -23,7 +23,7 @@
               zig
               zls
               xorriso
-              qemu
+              qemu_kvm
               parted
               gdb
             ];
