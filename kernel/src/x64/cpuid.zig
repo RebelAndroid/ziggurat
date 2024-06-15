@@ -154,7 +154,7 @@ const ExtendedFeatureFlagEnumeration3 = packed struct {
     ia32_arch_compatibilities: bool,
     ia32_arch_core_capabilities: bool,
     /// speculative store bypass disable
-    ssdb: bool,
+    ssbd: bool,
 };
 
 const CpuidFeatures1 = packed struct {
