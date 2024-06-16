@@ -289,3 +289,42 @@ comptime {
         \\  retq
     );
 }
+
+pub const Rflags = packed struct {
+    carry: bool,
+    _1: bool = true,
+    parity: bool,
+    _2: bool = false,
+    auxillary_carry: bool,
+    _3: bool = false,
+    zero: bool,
+    sign: bool,
+    trap: bool,
+    /// Clear to ignore maskable hardware interrupts, does not affect exceptions or nonmaskable interrupts
+    interrupt_enable: bool,
+    direction_flag: bool,
+    overflow_flag: bool,
+    io_privilege_level: u2,
+    nested_task: bool,
+    _4: bool = false,
+    resume_flag: bool,
+    virtual_8086: bool,
+    alignment_check_or_access_control: bool,
+    virtual_interrupt: bool,
+    virtual_interrupt_pending: bool,
+    identification: bool,
+    _5: u10 = 0,
+    _6: u32 = 0,
+};
+
+pub extern fn get_rflags() callconv(.C) Rflags;
+comptime {
+    asm (
+        \\.globl get_rflags
+        \\.type get_rflags @function
+        \\get_rflags:
+        \\  pushfq
+        \\  popq %rax
+        \\  retq
+    );
+}

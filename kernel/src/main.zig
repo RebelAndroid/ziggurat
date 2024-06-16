@@ -4,6 +4,8 @@ const pmm = @import("pmm.zig");
 const reg = @import("x64/registers.zig");
 const paging = @import("x64/page_table.zig");
 const cpuid = @import("x64/cpuid.zig");
+const idt = @import("x64/idt.zig");
+const gdt = @import("x64/gdt.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -71,35 +73,6 @@ fn serial_print(_: Context, text: []const u8) WriteError!usize {
     return text.len;
 }
 
-const IdtEntry = packed struct {
-    offset1: u16 = 0,
-    segment_selector: u16,
-    ist: u3,
-    _1: u5 = 0,
-    gate_type: u4,
-    _2: u1 = 0,
-    dpl: u2,
-    p: u1 = 1,
-    offset2: u48 = 0,
-    _3: u32 = 0,
-    fn setOffset(self: *IdtEntry, offset: u64) void {
-        self.offset1 = @truncate(offset);
-        self.offset2 = @truncate(offset >> 16);
-    }
-    fn getOffset(self: IdtEntry) u64 {
-        return (@as(u64, self.offset2) << 16) | self.offset1;
-    }
-};
-
-var IDT: [256]IdtEntry = std.mem.zeroes([256]IdtEntry);
-
-const IdtDescriptor = packed struct {
-    size: u16,
-    offset: u64,
-};
-
-var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
-
 const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
     .context = Context{},
 };
@@ -148,25 +121,10 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
 }
 
-extern fn lidt(u64) callconv(.C) void;
-comptime {
-    asm (
-        \\.globl lidt
-        \\.type lidt @function
-        \\lidt:
-        \\  lidtq (%rdi)
-        \\  retq
-    );
-}
-
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
-    main_log.info("hhdm offset: 0x{X}\n", .{hhdm_offset});
-    for (memory_map_entries) |e| {
-        main_log.info("base: 0x{X}, length: 0x{X}, kind: {}\n", .{ e.base, e.length, e.kind });
-    }
     main_log.info("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
 
-    var breakpoint_entry: IdtEntry = .{
+    var breakpoint_entry: idt.IdtEntry = .{
         .segment_selector = (5 << 3),
         .ist = 0,
         .gate_type = 0xF,
@@ -174,7 +132,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     };
     breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
 
-    var page_fault_entry: IdtEntry = .{
+    var page_fault_entry: idt.IdtEntry = .{
         .segment_selector = (5 << 3),
         .ist = 0,
         .gate_type = 0xF,
@@ -182,16 +140,12 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     };
     page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
 
-    IDT[3] = breakpoint_entry;
-    IDT[0xE] = page_fault_entry;
+    idt.IDT[3] = breakpoint_entry;
+    idt.IDT[0xE] = page_fault_entry;
 
-    IdtR.size = @sizeOf(@TypeOf(IDT)) - 1;
-    IdtR.offset = @intFromPtr(&IDT);
+    idt.load_idt();
 
-    const x = @intFromPtr(&IdtR);
-    lidt(x);
-
-    //breakpoint();
+    breakpoint();
 
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
@@ -206,10 +160,39 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
 
     main_log.info("vendor string: {s}\n", .{cpuid.get_vendor_string()});
 
-    const features = cpuid.get_features1();
-    main_log.info("features: {}\n", .{features});
+    var current_gdtr: gdt.GdtDescriptor = std.mem.zeroes(gdt.GdtDescriptor);
+    gdt.sgdt(&current_gdtr);
+    main_log.info("current gdtr: size: 0x{X}, offset: 0x{X}\n", .{ current_gdtr.size, current_gdtr.offset });
+    const gdt_entries = current_gdtr.get_entries();
+    for (gdt_entries) |e| {
+        main_log.info("gdt entry: base: {X}, limit: {X}, size: {}, executable: {}, long mode code: {}, type: {}, DPL: {}\n", .{ e.get_base(), e.get_limit(), e.size, e.executable, e.long_mode_code, e.descriptor_type, e.descriptor_privilege_level });
+    }
 
-    main_log.info("done", .{});
+    // The first gdt entry is always a null descriptor
+    gdt.Gdt[0] = std.mem.zeroes(gdt.GdtEntry);
+    // The second entry will be the code segment
+    gdt.Gdt[1] = gdt.GdtEntry{
+        .executable = true,
+        .rw = false,
+        .descriptor_privilege_level = 0,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = true,
+    };
+    // The third entry will be the data segment
+    gdt.Gdt[2] = gdt.GdtEntry{
+        .executable = false,
+        .rw = true,
+        .descriptor_privilege_level = 0,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = false,
+    };
+    gdt.load_gdt();
+
+    main_log.info("done\n", .{});
 
     done();
 }
