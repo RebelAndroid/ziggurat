@@ -103,7 +103,7 @@ comptime {
     );
 }
 
-pub extern fn set_code_segment_register(SegmentSelector) callconv(.C) void;
+pub extern fn set_code_segment_register(SegmentSelector, u64) callconv(.C) void;
 pub extern fn set_code_segment_register_2() callconv(.C) void;
 comptime {
     asm (
@@ -113,8 +113,7 @@ comptime {
         \\.type set_code_segment_register_2 @function
         \\set_code_segment_register:
         \\  push %rdi
-        \\  leaq set_code_segment_register_2, %rax
-        \\  push %rax
+        \\  push %rsi
         \\  lretq
         \\set_code_segment_register_2:
         \\  retq
@@ -139,5 +138,5 @@ pub fn load_gdt() void {
     set_data_segment_registers(data_segment_selector);
     log.info("location of set_code_segment_register: 0x{X}\n", .{@intFromPtr(&set_code_segment_register)});
     log.info("location of set_code_segment_register_2: 0x{X}\n", .{@intFromPtr(&set_code_segment_register_2)});
-    set_code_segment_register(code_segment_selector);
+    set_code_segment_register(code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 }
