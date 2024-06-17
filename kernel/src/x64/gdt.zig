@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.gdt);
 
 pub const GdtDescriptor = packed struct {
     size: u16,
@@ -57,6 +58,14 @@ pub const GdtEntry = packed struct {
     }
 };
 
+pub const SegmentSelector = packed struct {
+    requestor_privilege_level: u2,
+    /// When clear, this selector uses the GDT. When set, this selector uses the LDT.
+    table_indicator: bool,
+    /// The byte position of the selected descriptor entry divided by 8. This is the index in the table; note that some descriptor entries are 16 bytes and thus count as 2 entries.
+    selector_index: u13,
+};
+
 pub extern fn lgdt(u64) callconv(.C) void;
 comptime {
     asm (
@@ -79,9 +88,56 @@ comptime {
     );
 }
 
+pub extern fn set_data_segment_registers(SegmentSelector) callconv(.C) void;
+comptime {
+    asm (
+        \\.globl set_data_segment_registers
+        \\.type set_data_segment_registers @function
+        \\set_data_segment_registers:
+        \\  movw %di, %es
+        \\  movw %di, %ss
+        \\  movw %di, %ds
+        \\  movw %di, %fs
+        \\  movw %di, %gs
+        \\  retq
+    );
+}
+
+pub extern fn set_code_segment_register(SegmentSelector) callconv(.C) void;
+pub extern fn set_code_segment_register_2() callconv(.C) void;
+comptime {
+    asm (
+        \\.globl set_code_segment_register
+        \\.globl set_code_segment_register_2
+        \\.type set_code_segment_register @function
+        \\.type set_code_segment_register_2 @function
+        \\set_code_segment_register:
+        \\  push %rdi
+        \\  leaq set_code_segment_register_2, %rax
+        \\  push %rax
+        \\  lretq
+        \\set_code_segment_register_2:
+        \\  retq
+    );
+}
+
 pub fn load_gdt() void {
     GdtR.offset = @intFromPtr(&Gdt);
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
     const x = @intFromPtr(&GdtR);
     lgdt(x);
+    const data_segment_selector = SegmentSelector{
+        .requestor_privilege_level = 0,
+        .table_indicator = false,
+        .selector_index = 2,
+    };
+    const code_segment_selector = SegmentSelector{
+        .requestor_privilege_level = 0,
+        .table_indicator = false,
+        .selector_index = 1,
+    };
+    set_data_segment_registers(data_segment_selector);
+    log.info("location of set_code_segment_register: 0x{X}\n", .{@intFromPtr(&set_code_segment_register)});
+    log.info("location of set_code_segment_register_2: 0x{X}\n", .{@intFromPtr(&set_code_segment_register_2)});
+    set_code_segment_register(code_segment_selector);
 }
