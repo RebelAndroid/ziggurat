@@ -124,29 +124,6 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
     main_log.info("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
 
-    var breakpoint_entry: idt.IdtEntry = .{
-        .segment_selector = (5 << 3),
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
-
-    var page_fault_entry: idt.IdtEntry = .{
-        .segment_selector = (5 << 3),
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
-
-    idt.IDT[3] = breakpoint_entry;
-    idt.IDT[0xE] = page_fault_entry;
-
-    idt.load_idt();
-
-    breakpoint();
-
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
@@ -191,6 +168,29 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         .long_mode_code = false,
     };
     gdt.load_gdt();
+
+    var breakpoint_entry: idt.IdtEntry = .{
+        .segment_selector = (1 << 3),
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
+
+    var page_fault_entry: idt.IdtEntry = .{
+        .segment_selector = (1 << 3),
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
+
+    idt.IDT[3] = breakpoint_entry;
+    idt.IDT[0xE] = page_fault_entry;
+
+    idt.load_idt();
+
+    breakpoint();
 
     main_log.info("done\n", .{});
 
