@@ -1,19 +1,18 @@
 const std = @import("std");
 const log = std.log.scoped(.gdt);
 
+pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
+pub var Gdt: [3]GdtEntry = std.mem.zeroes([3]GdtEntry);
+
 pub const GdtDescriptor = packed struct {
     size: u16,
     offset: u64,
     pub fn get_entries(self: GdtDescriptor) []GdtEntry {
         const start: [*]GdtEntry = @ptrFromInt(self.offset);
-        const length = (@as(u64, self.size) + 1) / 8;
+        const length = @divExact(@as(u64, self.size) + 1, 8);
         return start[0..length];
     }
 };
-
-pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-
-pub var Gdt: [3]GdtEntry = std.mem.zeroes([3]GdtEntry);
 
 pub const GdtEntry = packed struct {
     limit1: u16 = 0,
@@ -62,9 +61,29 @@ pub const SegmentSelector = packed struct {
     requestor_privilege_level: u2,
     /// When clear, this selector uses the GDT. When set, this selector uses the LDT.
     table_indicator: bool,
-    /// The byte position of the selected descriptor entry divided by 8. This is the index in the table; note that some descriptor entries are 16 bytes and thus count as 2 entries.
+    /// The byte position of the selected descriptor entry divided by 8. This is the index in the
+    /// table; note that some descriptor entries are 16 bytes and thus count as 2 entries.
     selector_index: u13,
 };
+
+pub fn load_gdt() void {
+    GdtR.offset = @intFromPtr(&Gdt);
+    GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
+    const x = @intFromPtr(&GdtR);
+    lgdt(x);
+    const data_segment_selector = SegmentSelector{
+        .requestor_privilege_level = 0,
+        .table_indicator = false,
+        .selector_index = 2,
+    };
+    const code_segment_selector = SegmentSelector{
+        .requestor_privilege_level = 0,
+        .table_indicator = false,
+        .selector_index = 1,
+    };
+    set_data_segment_registers(data_segment_selector);
+    set_code_segment_register(code_segment_selector, @intFromPtr(&set_code_segment_register_2));
+}
 
 pub extern fn lgdt(u64) callconv(.C) void;
 comptime {
@@ -104,7 +123,7 @@ comptime {
 }
 
 pub extern fn set_code_segment_register(SegmentSelector, u64) callconv(.C) void;
-pub extern fn set_code_segment_register_2() callconv(.C) void;
+extern fn set_code_segment_register_2() callconv(.C) void;
 comptime {
     asm (
         \\.globl set_code_segment_register
@@ -118,25 +137,4 @@ comptime {
         \\set_code_segment_register_2:
         \\  retq
     );
-}
-
-pub fn load_gdt() void {
-    GdtR.offset = @intFromPtr(&Gdt);
-    GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
-    const x = @intFromPtr(&GdtR);
-    lgdt(x);
-    const data_segment_selector = SegmentSelector{
-        .requestor_privilege_level = 0,
-        .table_indicator = false,
-        .selector_index = 2,
-    };
-    const code_segment_selector = SegmentSelector{
-        .requestor_privilege_level = 0,
-        .table_indicator = false,
-        .selector_index = 1,
-    };
-    set_data_segment_registers(data_segment_selector);
-    log.info("location of set_code_segment_register: 0x{X}\n", .{@intFromPtr(&set_code_segment_register)});
-    log.info("location of set_code_segment_register_2: 0x{X}\n", .{@intFromPtr(&set_code_segment_register_2)});
-    set_code_segment_register(code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 }

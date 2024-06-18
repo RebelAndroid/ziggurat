@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const PML4E = packed struct {
+pub const PML4Entry = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -24,18 +24,18 @@ pub const PML4E = packed struct {
     pdpt: u40 = 0,
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_pdpt(self: PML4E) u64 {
+    pub fn get_pdpt(self: PML4Entry) u64 {
         return @as(u64, self.pdpt) << 12;
     }
-    pub fn set_pdpt(self: *volatile PML4E, pdpt: u64) void {
+    pub fn set_pdpt(self: *volatile PML4Entry, pdpt: u64) void {
         self.pdpt = @truncate(pdpt >> 12);
     }
 };
 
-pub const PML4: type = [512]PML4E;
+pub const PML4: type = [512]PML4Entry;
 
 /// Page Directory Pointer Table Entry that maps a 1GB page
-pub const PDPTE_1GB = packed struct {
+pub const PdptEntry_1GB = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -67,13 +67,13 @@ pub const PDPTE_1GB = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PDPTE_1GB, page: u64) void {
+    pub fn set_page(self: *volatile PdptEntry_1GB, page: u64) void {
         self.page = @truncate(page >> 30);
     }
 };
 
 /// Page Directory Pointer Table Entry that references a page directory
-pub const PDPTE_PD = packed struct {
+pub const PdptEntry_PD = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -98,27 +98,28 @@ pub const PDPTE_PD = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_page_directory(self: PDPTE_PD) u64 {
+    pub fn get_page_directory(self: PdptEntry_PD) u64 {
         return @as(u64, self.page_directory) << 12;
     }
-    pub fn set_page_directory(self: *volatile PDPTE_PD, page_directory: u64) void {
+    pub fn set_page_directory(self: *volatile PdptEntry_PD, page_directory: u64) void {
         self.page_directory = @truncate(page_directory >> 12);
     }
 };
 
-pub const PDPTE = packed union {
-    huge_page: PDPTE_1GB,
-    page_directory: PDPTE_PD,
-    pub fn is_huge_page(self: PDPTE) bool {
+/// Page Directory Pointer Table Entry
+pub const PdptEntry = packed union {
+    huge_page: PdptEntry_1GB,
+    page_directory: PdptEntry_PD,
+    pub fn is_huge_page(self: PdptEntry) bool {
         return self.huge_page.page_size;
     }
 };
 
 /// Page Directory Pointer Table
-pub const PDPT: type = [512]PDPTE;
+pub const Pdpt: type = [512]PdptEntry;
 
 /// Page Directory Entry that maps a 2MB page
-pub const PDE_2MB = packed struct {
+pub const PdEntry_2MB = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -150,13 +151,13 @@ pub const PDE_2MB = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PDE_2MB, page: u64) void {
+    pub fn set_page(self: *volatile PdEntry_2MB, page: u64) void {
         self.page = @truncate(page >> 21);
     }
 };
 
 /// Page Directory Entry that references a page table
-pub const PDE_PT = packed struct {
+pub const PdEntry_PT = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -181,27 +182,27 @@ pub const PDE_PT = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_page_table(self: PDE_PT) u64 {
+    pub fn get_page_table(self: PdEntry_PT) u64 {
         return @as(u64, self.page_table) << 12;
     }
-    pub fn set_page_table(self: *volatile PDE_PT, page_table: u64) void {
+    pub fn set_page_table(self: *volatile PdEntry_PT, page_table: u64) void {
         self.page_table = @truncate(page_table >> 12);
     }
 };
 
-pub const PDE = packed union {
-    huge_page: PDE_2MB,
-    page_table: PDE_PT,
-    pub fn is_huge_page(self: PDE) bool {
+pub const PdEntry = packed union {
+    huge_page: PdEntry_2MB,
+    page_table: PdEntry_PT,
+    pub fn is_huge_page(self: PdEntry) bool {
         return self.huge_page.page_size;
     }
 };
 
 /// Page Directory
-pub const PD: type = [512]PDE;
+pub const Pd: type = [512]PdEntry;
 
 /// Page Table Entry, always maps a 4kb page
-pub const PTE = packed struct {
+pub const PtEntry = packed struct {
     present: bool,
     /// Allows writing
     read_write: bool,
@@ -229,12 +230,13 @@ pub const PTE = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PTE, physical_address: u64) void {
+    pub fn set_page(self: *volatile PtEntry, physical_address: u64) void {
         self.page = @truncate(physical_address >> 12);
     }
 };
 
-pub const PT: type = [512]PTE;
+/// Page Table
+pub const Pt: type = [512]PtEntry;
 
 pub const VirtualAddress = packed struct {
     page_offset: u12,
@@ -245,12 +247,7 @@ pub const VirtualAddress = packed struct {
     sign_extension: u16,
 };
 
-pub const PageType = enum {
-    four_kb,
-    two_mb,
-    one_gb,
-};
-
+/// A page of any size.
 pub const Page = union(enum) {
     four_kb: VirtualAddress,
     two_mb: VirtualAddress,
@@ -259,18 +256,18 @@ pub const Page = union(enum) {
 
 test "Paging Structure Sizes" {
     // Sizes of entries
-    try std.testing.expectEqual(64, @bitSizeOf(PML4E));
-    try std.testing.expectEqual(64, @bitSizeOf(PDPTE_1GB));
-    try std.testing.expectEqual(64, @bitSizeOf(PDPTE_PD));
-    try std.testing.expectEqual(64, @bitSizeOf(PDPTE));
-    try std.testing.expectEqual(64, @bitSizeOf(PDE_2MB));
-    try std.testing.expectEqual(64, @bitSizeOf(PDE_PT));
+    try std.testing.expectEqual(64, @bitSizeOf(PML4Entry));
+    try std.testing.expectEqual(64, @bitSizeOf(PdptEntry_1GB));
+    try std.testing.expectEqual(64, @bitSizeOf(PdptEntry_PD));
+    try std.testing.expectEqual(64, @bitSizeOf(PdptEntry));
+    try std.testing.expectEqual(64, @bitSizeOf(PdEntry_2MB));
+    try std.testing.expectEqual(64, @bitSizeOf(PdEntry_PT));
 
     // Sizes of whole tables
     try std.testing.expectEqual(4096, @sizeOf(PML4));
-    try std.testing.expectEqual(4096, @sizeOf(PDPT));
-    try std.testing.expectEqual(4096, @sizeOf(PD));
-    try std.testing.expectEqual(4096, @sizeOf(PT));
+    try std.testing.expectEqual(4096, @sizeOf(Pdpt));
+    try std.testing.expectEqual(4096, @sizeOf(Pd));
+    try std.testing.expectEqual(4096, @sizeOf(Pt));
 
     // Size of VirtualAddress
     try std.testing.expectEqual(64, @bitSizeOf(VirtualAddress));

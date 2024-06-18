@@ -73,6 +73,11 @@ fn serial_print(_: Context, text: []const u8) WriteError!usize {
     return text.len;
 }
 
+pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    main_log.err("panic: {s}\n", .{message});
+    done();
+}
+
 const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
     .context = Context{},
 };
@@ -191,6 +196,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     idt.load_idt();
 
     breakpoint();
+
+    _ = @divExact(memory_map_entries[0].base, 3);
 
     main_log.info("done\n", .{});
 

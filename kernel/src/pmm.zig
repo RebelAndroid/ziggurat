@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const FrameAllocator = struct {
     front: u64 = 0,
     hhdm_offset: u64,

@@ -1,5 +1,8 @@
 const std = @import("std");
 
+pub var IDT: [256]IdtEntry = std.mem.zeroes([256]IdtEntry);
+pub var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
+
 pub const IdtEntry = packed struct {
     offset1: u16 = 0,
     segment_selector: u16,
@@ -20,14 +23,10 @@ pub const IdtEntry = packed struct {
     }
 };
 
-pub var IDT: [256]IdtEntry = std.mem.zeroes([256]IdtEntry);
-
 pub const IdtDescriptor = packed struct {
     size: u16,
     offset: u64,
 };
-
-pub var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
 
 pub extern fn lidt(u64) callconv(.C) void;
 comptime {
