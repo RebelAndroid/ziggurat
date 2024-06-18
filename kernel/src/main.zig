@@ -197,8 +197,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
 
     breakpoint();
 
-    _ = @divExact(memory_map_entries[0].base, 3);
-
     main_log.info("done\n", .{});
 
     done();
