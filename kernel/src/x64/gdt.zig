@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.gdt);
 
 pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-pub var Gdt: [3]GdtEntry = std.mem.zeroes([3]GdtEntry);
+pub var Gdt: [5]GdtEntry = std.mem.zeroes([5]GdtEntry);
 
 pub const GdtDescriptor = packed struct {
     size: u16,
@@ -67,6 +67,49 @@ pub const SegmentSelector = packed struct {
 };
 
 pub fn load_gdt() void {
+    // The first gdt entry is always a null descriptor
+    Gdt[0] = std.mem.zeroes(GdtEntry);
+    // The second entry will be the kernel code segment
+    Gdt[1] = GdtEntry{
+        .executable = true,
+        .rw = false,
+        .descriptor_privilege_level = 0,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = true,
+    };
+    // The third entry will be the kernel data segment
+    Gdt[2] = GdtEntry{
+        .executable = false,
+        .rw = true,
+        .descriptor_privilege_level = 0,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = false,
+    };
+    // The fourth entry will be the user code segment
+    Gdt[3] = GdtEntry{
+        .executable = true,
+        .rw = false,
+        .descriptor_privilege_level = 3,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = true,
+    };
+    // The fifth entry will be the user data segment
+    Gdt[4] = GdtEntry{
+        .executable = false,
+        .rw = true,
+        .descriptor_privilege_level = 3,
+        .direction_conforming = false,
+        .granularity = false,
+        .size = false,
+        .long_mode_code = false,
+    };
+
     GdtR.offset = @intFromPtr(&Gdt);
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
     const x = @intFromPtr(&GdtR);

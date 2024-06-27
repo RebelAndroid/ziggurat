@@ -6,6 +6,7 @@ const paging = @import("x64/page_table.zig");
 const cpuid = @import("x64/cpuid.zig");
 const idt = @import("x64/idt.zig");
 const gdt = @import("x64/gdt.zig");
+const acpi = @import("acpi.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -13,7 +14,7 @@ const gdt = @import("x64/gdt.zig");
 pub export var framebuffer_request: limine.FramebufferRequest = .{};
 pub export var hhdm_request: limine.HhdmRequest = .{};
 pub export var memory_map_request: limine.MemoryMapRequest = .{};
-pub export var rdsp_request: limine.RsdpRequest = .{};
+pub export var rsdp_request: limine.RsdpRequest = .{};
 
 // Set the base revision to 2, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -102,9 +103,9 @@ export fn _start() callconv(.C) noreturn {
 
         if (hhdm_request.response) |hhdm_response| {
             if (memory_map_request.response) |memory_map_response| {
-                if (rdsp_request.response) |rdsp_response| {
+                if (rsdp_request.response) |rsdp_response| {
                     const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
-                    main(hhdm_response.offset, entries, rdsp_response.address);
+                    main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)));
                 }
             }
         }
@@ -126,9 +127,7 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
 }
 
-fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_location: *anyopaque) noreturn {
-    main_log.info("rdsp: 0x{X}\n", .{@intFromPtr(rdsp_location) - hhdm_offset});
-
+fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
@@ -150,28 +149,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
         main_log.info("gdt entry: base: {X}, limit: {X}, size: {}, executable: {}, long mode code: {}, type: {}, DPL: {}\n", .{ e.get_base(), e.get_limit(), e.size, e.executable, e.long_mode_code, e.descriptor_type, e.descriptor_privilege_level });
     }
 
-    // The first gdt entry is always a null descriptor
-    gdt.Gdt[0] = std.mem.zeroes(gdt.GdtEntry);
-    // The second entry will be the code segment
-    gdt.Gdt[1] = gdt.GdtEntry{
-        .executable = true,
-        .rw = false,
-        .descriptor_privilege_level = 0,
-        .direction_conforming = false,
-        .granularity = false,
-        .size = false,
-        .long_mode_code = true,
-    };
-    // The third entry will be the data segment
-    gdt.Gdt[2] = gdt.GdtEntry{
-        .executable = false,
-        .rw = true,
-        .descriptor_privilege_level = 0,
-        .direction_conforming = false,
-        .granularity = false,
-        .size = false,
-        .long_mode_code = false,
-    };
     gdt.load_gdt();
 
     var breakpoint_entry: idt.IdtEntry = .{
@@ -196,6 +173,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, rdsp_loc
     idt.load_idt();
 
     breakpoint();
+
+    main_log.info("xsdp location: {}\n", .{xsdp});
 
     main_log.info("done\n", .{});
 

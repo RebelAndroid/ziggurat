@@ -38,8 +38,10 @@ run-hdd: $(IMAGE_NAME).hdd
 run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 	qemu-system-x86_64 -M q35 -m 2G -bios ovmf/OVMF.fd -hda $(IMAGE_NAME).hdd
 
-zig-test: kernel/src/x64/page_table.zig
-	zig test $^
+.PHONY: zig-test
+zig-test:
+	zig test kernel/src/x64/page_table.zig
+	zig test kernel/src/acpi.zig
 
 ovmf:
 	mkdir -p ovmf
