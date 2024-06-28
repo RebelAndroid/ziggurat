@@ -38,5 +38,35 @@ pub fn build(b: *std.Build) void {
     // Disable LTO. This prevents issues with limine requests
     kernel.want_lto = false;
 
+    kernel.addIncludePath(.{ .path = "acpica-unix-20240321/source/include" });
+
+    const acpica = b.addStaticLibrary(.{
+        .name = "acpica",
+        .target = b.resolveTargetQuery(target),
+        .code_model = .kernel,
+        .pic = true,
+        .optimize = optimize,
+    });
+    // acpica.defineCMacro("ACPI_USE_SYSTEM_INTTYPES", null);
+    acpica.addCSourceFiles(.{
+        .files = &[_][]const u8{
+            "../acpica-unix-20240321/source/components/hardware/hwacpi.c",
+            "../acpica-unix-20240321/source/components/hardware/hwesleep.c",
+            "../acpica-unix-20240321/source/components/hardware/hwgpe.c",
+            "../acpica-unix-20240321/source/components/hardware/hwpci.c",
+            "../acpica-unix-20240321/source/components/hardware/hwregs.c",
+            "../acpica-unix-20240321/source/components/hardware/hwsleep.c",
+            "../acpica-unix-20240321/source/components/hardware/hwtimer.c",
+            "../acpica-unix-20240321/source/components/hardware/hwvalid.c",
+            "../acpica-unix-20240321/source/components/hardware/hwxface.c",
+            "../acpica-unix-20240321/source/components/hardware/hwxfsleep.c",
+
+            "../acpica-unix-20240321/source/components/utilities/utxfinit.c",
+        },
+    });
+    acpica.addIncludePath(.{ .path = "../acpica-unix-20240321/source/include" });
+
+    kernel.linkLibrary(acpica);
+
     b.installArtifact(kernel);
 }

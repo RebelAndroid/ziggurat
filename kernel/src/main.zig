@@ -8,6 +8,8 @@ const idt = @import("x64/idt.zig");
 const gdt = @import("x64/gdt.zig");
 const acpi = @import("acpi.zig");
 
+extern fn AcpiInitializeSubsystem() callconv(.C) void;
+
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent. In Zig, `export var` is what we use.
@@ -177,6 +179,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     main_log.info("xsdp location: {}\n", .{xsdp});
 
     main_log.info("done\n", .{});
+
+    AcpiInitializeSubsystem();
 
     done();
 }
