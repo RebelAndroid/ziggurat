@@ -179,8 +179,5 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     main_log.info("xsdp location: {}\n", .{xsdp});
 
     main_log.info("done\n", .{});
-
-    AcpiInitializeSubsystem();
-
     done();
 }

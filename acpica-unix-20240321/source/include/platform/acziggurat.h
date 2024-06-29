@@ -202,13 +202,17 @@
 
 /* Host-dependent types and defines for in-kernel ACPICA */
 
+struct spinlock{};
+
+struct cache{};
+
 #define ACPI_MACHINE_WIDTH          64
 #define ACPI_USE_NATIVE_MATH64
 #define ACPI_EXPORT_SYMBOL(symbol)  EXPORT_SYMBOL(symbol);
 #define strtoul                     simple_strtoul
 
-#define ACPI_CACHE_T                struct kmem_cache
-#define ACPI_SPINLOCK               spinlock_t *
+#define ACPI_CACHE_T                struct cache
+#define ACPI_SPINLOCK               struct spinlock*
 #define ACPI_CPU_FLAGS              unsigned long
 
 #define ACPI_UINTPTR_T              uintptr_t
