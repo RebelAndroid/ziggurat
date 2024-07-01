@@ -147,6 +147,27 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 200, 50, 50, 500, framebuffer_log.green);
     framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 500, 500, 100, 20, framebuffer_log.blue);
 
+    const mask: [7]u8 = .{
+        0b00111100,
+        0b01000010,
+        0b10000001,
+        0b11111111,
+        0b10000001,
+        0b10000001,
+        0b10000001,
+    };
+
+    framebuffer_log.draw_masked_rect(
+        framebuffer.address,
+        framebuffer.pitch,
+        100,
+        100,
+        8,
+        7,
+        &mask,
+        framebuffer_log.blue,
+    );
+
     main_log.info("done\n", .{});
     done();
 }

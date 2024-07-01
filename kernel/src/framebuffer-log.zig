@@ -54,3 +54,23 @@ pub fn draw_rect(framebuffer: [*]u8, stride: u64, x: u64, y: u64, width: u64, he
         i += (stride - 4 * width);
     }
 }
+
+pub fn draw_masked_rect(framebuffer: [*]u8, stride: u64, x: u64, y: u64, width: u64, height: u64, mask: []const u8, color: Color) void {
+    var xi: u64 = 0;
+    var yi: u64 = 0;
+    var i: u64 = 4 * x + y * stride;
+    var maski: u64 = 0;
+    while (yi < height) : (yi += 1) {
+        xi = 0;
+        while (xi < width) : (xi += 1) {
+            if ((mask[maski / 8] >> @intCast(maski % 8) & 0x1) != 0) {
+                framebuffer[i + 0] = color.b;
+                framebuffer[i + 1] = color.g;
+                framebuffer[i + 2] = color.r;
+            }
+            i += 4;
+            maski += 1;
+        }
+        i += (stride - 4 * width);
+    }
+}
