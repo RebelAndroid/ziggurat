@@ -39,7 +39,7 @@ pub fn build(b: *std.Build) void {
     // Disable LTO. This prevents issues with limine requests
     kernel.want_lto = false;
 
-    build_font.build_font();
+    // build_font.build_font();
 
     b.installArtifact(kernel);
 }

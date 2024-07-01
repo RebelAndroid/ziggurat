@@ -7,6 +7,8 @@ const cpuid = @import("x64/cpuid.zig");
 const idt = @import("x64/idt.zig");
 const gdt = @import("x64/gdt.zig");
 const acpi = @import("acpi.zig");
+const serial_log = @import("serial-log.zig");
+const framebuffer_log = @import("framebuffer-log.zig");
 
 extern fn AcpiInitializeSubsystem() callconv(.C) void;
 
@@ -25,15 +27,8 @@ pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = serial_log,
+    .logFn = serial_log.serial_log,
 };
-
-pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
-    const scope_name = @tagName(scope);
-    const level_name = level.asText();
-    try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
-    try serial_writer.print(format, args);
-}
 
 const main_log = std.log.scoped(.main);
 
@@ -43,37 +38,8 @@ inline fn done() noreturn {
     }
 }
 
-fn out_byte(port: u16, data: u8) void {
-    _ = asm volatile ("outb %al, %dx"
-        : [ret] "= {rax}" (-> usize),
-        : [port] "{dx}" (port),
-          [data] "{al}" (data),
-    );
-}
-
 inline fn breakpoint() void {
     asm volatile ("int $3");
-}
-
-fn serial_init() void {
-    const port: u16 = 0x3f8; // base IO port for the serial port
-    out_byte(port + 1, 0x00); // disable interrupts
-    out_byte(port + 3, 0x80); // set DLAB
-    out_byte(port + 0, 0x03); // set divisor (low byte)
-    out_byte(port + 1, 0x00); // set divisor (high byte)
-    out_byte(port + 3, 0x03); // clear DLAB, set character length to 8 bits, 1 stop bit, no parity bits
-    out_byte(port + 2, 0xC7); // enable and clear FIFO's, set interrupt trigger to highest value (this is not used)
-    out_byte(port + 4, 0x0F); // set DTR, RTS, OUT1, and OUT2
-}
-
-const Context = struct {};
-const WriteError = error{};
-
-fn serial_print(_: Context, text: []const u8) WriteError!usize {
-    for (text) |b| {
-        out_byte(0x03F8, b);
-    }
-    return text.len;
 }
 
 pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
@@ -81,17 +47,13 @@ pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noretu
     done();
 }
 
-const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-    .context = Context{},
-};
-
 // The following will be our kernel's entry point.
 export fn _start() callconv(.C) noreturn {
     // Ensure the bootloader actually understands our base revision (see spec).
     if (!base_revision.is_supported()) {
         done();
     }
-    serial_init();
+    serial_log.init();
 
     // Ensure we got a framebuffer.
     if (framebuffer_request.response) |framebuffer_response| {
@@ -101,13 +63,13 @@ export fn _start() callconv(.C) noreturn {
         }
 
         // Get the first framebuffer's information.
-        //const framebuffer = framebuffer_response.framebuffers()[0];
+        const framebuffer = framebuffer_response.framebuffers()[0];
 
         if (hhdm_request.response) |hhdm_response| {
             if (memory_map_request.response) |memory_map_response| {
                 if (rsdp_request.response) |rsdp_response| {
                     const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
-                    main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)));
+                    main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)), framebuffer);
                 }
             }
         }
@@ -129,7 +91,7 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
 }
 
-fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp) noreturn {
+fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp, framebuffer: *limine.Framebuffer) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
@@ -177,6 +139,13 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     breakpoint();
 
     main_log.info("xsdp location: {}\n", .{xsdp});
+
+    main_log.info("framebuffer: {}\n", .{framebuffer});
+
+    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 0, 0, framebuffer.width, framebuffer.height, framebuffer_log.white);
+    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 50, 50, 50, 50, framebuffer_log.red);
+    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 200, 50, 50, 500, framebuffer_log.green);
+    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 500, 500, 100, 20, framebuffer_log.blue);
 
     main_log.info("done\n", .{});
     done();

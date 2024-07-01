@@ -83,6 +83,7 @@ const GlyphBuilder = struct {
                                         .encoding = encoding,
                                         .xstride = xstride,
                                         .ystride = ystride,
+                                        .bitmap = self.bitmap,
                                     };
                                 }
                             }
@@ -103,6 +104,7 @@ const Glyph = struct {
     encoding: u64,
     xstride: u64,
     ystride: u64,
+    bitmap: std.ArrayList(u64),
 };
 
 const FontBuilder = struct {
