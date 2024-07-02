@@ -139,7 +139,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     main_log.info("xsdp location: {}\n", .{xsdp});
 
     framebuffer_log.init(framebuffer.address, framebuffer.pitch);
-    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "B") catch unreachable;
+    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "ABC DEF") catch unreachable;
 
     main_log.info("done\n", .{});
     done();

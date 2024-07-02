@@ -246,7 +246,7 @@ pub fn pack_bitmap(bitmap: []u8, width: u8, height: u8, allocator: std.mem.Alloc
         while (x < width) : (x += 1) {
             const bytes_per_line = std.math.divCeil(u64, width, 8) catch unreachable;
             const byte = bitmap[y * bytes_per_line + (x / 8)];
-            const bit = ((byte >> @truncate(@rem(x, 8))) & 0x1) == 1;
+            const bit = ((byte >> @truncate(7 - @rem(x, 8))) & 0x1) == 1;
             if (bit) {
                 bitset.set(i);
             }

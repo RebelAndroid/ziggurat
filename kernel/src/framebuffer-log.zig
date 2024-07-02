@@ -68,27 +68,27 @@ pub fn init(framebuffer: [*]u8, stride: u64) void {
 }
 
 pub fn framebuffer_print(_: Context, text: []const u8) WriteError!usize {
-    const glyph = context.glyphs[text[0]];
-    const bitmap_size = std.math.divCeil(u64, @as(u64, glyph.width) * @as(u64, glyph.height), 8) catch unreachable;
+    for (text) |char| {
+        const glyph = context.glyphs[char];
+        const bitmap_size = std.math.divCeil(u64, @as(u64, glyph.width) * @as(u64, glyph.height), 8) catch unreachable;
+        const bitmap = context.bitmaps[glyph.bitmap_index..(glyph.bitmap_index + bitmap_size)];
 
-    const bitmap = context.bitmaps[glyph.bitmap_index..(glyph.bitmap_index + bitmap_size)];
-
-    const x: u64 = context.x + glyph.xoffset;
-    const y: u64 = context.y + glyph.yoffset;
-
-    draw_masked_rect(
-        context.framebuffer,
-        context.stride,
-        x,
-        y,
-        glyph.width,
-        glyph.height,
-        bitmap,
-        blue,
-    );
-    context.x += glyph.xoffset;
-    context.y += glyph.yoffset;
-    return 1;
+        const x: u64 = context.x + glyph.xoffset;
+        const y: u64 = context.y + glyph.yoffset;
+        draw_masked_rect(
+            context.framebuffer,
+            context.stride,
+            x,
+            y,
+            glyph.width,
+            glyph.height,
+            bitmap,
+            blue,
+        );
+        context.x += glyph.xstride;
+        context.y += glyph.ystride;
+    }
+    return text.len;
 }
 
 pub fn draw_rect(framebuffer: [*]u8, stride: u64, x: u64, y: u64, width: u64, height: u64, color: Color) void {
