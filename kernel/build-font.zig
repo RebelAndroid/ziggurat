@@ -1,14 +1,14 @@
 const std = @import("std");
 
 const GlyphBuilder = struct {
-    xoffset: ?u64 = null,
-    yoffset: ?u64 = null,
-    width: ?u64 = null,
-    height: ?u64 = null,
+    xoffset: ?u8 = null,
+    yoffset: ?u8 = null,
+    width: ?u8 = null,
+    height: ?u8 = null,
     encoding: ?u64 = null,
-    xstride: ?u64 = null,
-    ystride: ?u64 = null,
-    bitmap: std.ArrayList(u64),
+    xstride: ?u8 = null,
+    ystride: ?u8 = null,
+    bitmap: std.ArrayList(u8),
     pub fn add_line(self: *GlyphBuilder, line: []const u8) void {
         if (is_prefix(line, "ENCODING")) {
             if (self.encoding) |_| {
@@ -24,43 +24,46 @@ const GlyphBuilder = struct {
             if (parse.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.xstride = parse.value;
+            self.xstride = @intCast(parse.value);
             const parse2 = parse_first_int(line[parse.end..]);
             if (parse2.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.ystride = parse2.value;
+            self.ystride = @intCast(parse2.value);
         } else if (is_prefix(line, "BBX")) {
             const parse = parse_first_int(line);
             if (parse.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.width = parse.value;
+            self.width = @intCast(parse.value);
 
             const parse2 = parse_first_int(line[parse.end..]);
             if (parse2.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.height = parse2.value;
+            self.height = @intCast(parse2.value);
 
             const parse3 = parse_first_int(line[(parse.end + parse2.end)..]);
             if (parse3.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.xoffset = parse3.value;
+            self.xoffset = @intCast(parse3.value);
 
             const parse4 = parse_first_int(line[(parse.end + parse2.end + parse3.end)..]);
             if (parse4.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
-            self.yoffset = parse4.value;
+            self.yoffset = @intCast(parse4.value);
         } else if (is_prefix(line, "BITMAP")) {
             // TODO: ensure input is well formed
         } else if (is_prefix(line, "SWIDTH")) {
             // do nothing
         } else {
             // we are in the bitmap
-            self.bitmap.append(std.fmt.parseInt(u64, line, 16) catch std.debug.panic("unable to parse bitmap", .{})) catch std.debug.panic("Allocator error!", .{});
+            var i: u64 = 0;
+            while (i < line.len - 1) : (i += 2) {
+                self.bitmap.append(std.fmt.parseInt(u8, line[i..(i + 2)], 16) catch std.debug.panic("unable to parse bitmap {s}", .{line})) catch std.debug.panic("Allocator error!", .{});
+            }
         }
     }
 
@@ -72,9 +75,6 @@ const GlyphBuilder = struct {
                         if (self.encoding) |encoding| {
                             if (self.xstride) |xstride| {
                                 if (self.ystride) |ystride| {
-                                    if (self.bitmap.items.len != height) {
-                                        std.debug.panic("incomplete bitmap", .{});
-                                    }
                                     return .{
                                         .xoffset = xoffset,
                                         .yoffset = yoffset,
@@ -97,14 +97,14 @@ const GlyphBuilder = struct {
 };
 
 const Glyph = struct {
-    xoffset: u64,
-    yoffset: u64,
-    width: u64,
-    height: u64,
+    xoffset: u8,
+    yoffset: u8,
+    width: u8,
+    height: u8,
     encoding: u64,
-    xstride: u64,
-    ystride: u64,
-    bitmap: std.ArrayList(u64),
+    xstride: u8,
+    ystride: u8,
+    bitmap: std.ArrayList(u8),
 };
 
 const FontBuilder = struct {
@@ -136,7 +136,7 @@ const FontBuilder = struct {
             if (self.glyph_builder) |_| {
                 std.debug.panic("unmatched STARTCHAR", .{});
             } else {
-                self.glyph_builder = .{ .bitmap = std.ArrayList(u64).init(self.allocator) };
+                self.glyph_builder = .{ .bitmap = std.ArrayList(u8).init(self.allocator) };
             }
         } else if (is_prefix(line, "ENDCHAR")) {
             if (self.glyph_builder) |*glyph_builder| {
@@ -171,11 +171,8 @@ const Font = struct {
     glyphs: std.ArrayList(Glyph),
 };
 
-pub fn build_font() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    const file_handle = std.fs.cwd().openFile("../cozette.bdf", .{}) catch std.debug.panic("oof", .{});
-    const file_reader = file_handle.reader();
+pub fn build_font(file: std.fs.File, allocator: std.mem.Allocator) ![]u8 {
+    const file_reader = file.reader();
 
     var fontBuilder: FontBuilder = .{
         .glyphs = std.ArrayList(Glyph).init(allocator),
@@ -190,8 +187,85 @@ pub fn build_font() void {
         }
     }
     const font = fontBuilder.build();
-    std.debug.print("font chars: {}\n", .{font.glyphs.items.len});
-    std.debug.print("A: {}\n", .{font.glyphs.items[65]});
+    return serialize_font(font, allocator);
+}
+
+const PackedGlyph = extern struct {
+    bitmap_index: u64,
+    width: u8,
+    height: u8,
+    xoffset: u8,
+    yoffset: u8,
+    xstride: u8,
+    ystride: u8,
+    /// reserved for future use
+    _1: u16 = 0,
+};
+
+pub fn serialize_font(font: Font, allocator: std.mem.Allocator) ![]u8 {
+    var glyphs = std.ArrayList(PackedGlyph).init(allocator);
+    var bitmaps = std.ArrayList(u8).init(allocator);
+    for (font.glyphs.items) |glyph| {
+        try glyphs.append(.{
+            .bitmap_index = bitmaps.items.len,
+            .width = glyph.width,
+            .height = glyph.height,
+            .xoffset = glyph.xoffset,
+            .yoffset = glyph.yoffset,
+            .xstride = glyph.xstride,
+            .ystride = glyph.ystride,
+        });
+        try bitmaps.appendSlice(try pack_bitmap(glyph.bitmap.items, glyph.width, glyph.height, allocator));
+    }
+    var header = std.ArrayList(u8).init(allocator);
+    try header.appendSlice(@as([*]const u8, @ptrCast(&font.ascent))[0..8]);
+    try header.appendSlice(@as([*]const u8, @ptrCast(&font.descent))[0..8]);
+
+    try header.appendSlice(@as([*]const u8, @ptrCast(&glyphs.items.len))[0..8]);
+    try header.appendSlice(@as([*]const u8, @ptrCast(&bitmaps.items.len))[0..8]);
+
+    std.debug.print("glyphs: {} bitmap size: {}\n", .{ glyphs.items.len, bitmaps.items.len });
+
+    var data = std.ArrayList(u8).init(allocator);
+    try data.appendSlice(header.items);
+    std.debug.print("glyph offset: {} ", .{data.items.len});
+    try data.appendSlice(std.mem.sliceAsBytes(glyphs.items));
+    std.debug.print("bitmaps offset: {}\n", .{data.items.len});
+    try data.appendSlice(bitmaps.items);
+
+    return data.items;
+}
+
+pub fn pack_bitmap(bitmap: []u8, width: u8, height: u8, allocator: std.mem.Allocator) ![]u8 {
+    var bitset = try std.bit_set.DynamicBitSet.initEmpty(allocator, width * height);
+    var y: u64 = 0;
+    var x: u64 = 0;
+    var i: u64 = 0;
+    while (y < height) : (y += 1) {
+        x = 0;
+        while (x < width) : (x += 1) {
+            const bytes_per_line = std.math.divCeil(u64, width, 8) catch unreachable;
+            const byte = bitmap[y * bytes_per_line + (x / 8)];
+            const bit = ((byte >> @truncate(@rem(x, 8))) & 0x1) == 1;
+            if (bit) {
+                bitset.set(i);
+            }
+            i += 1;
+        }
+    }
+    const byte_size = std.math.divCeil(u64, width * height, 8) catch unreachable;
+    var packed_bitmap = std.ArrayList(u8).init(allocator);
+    try packed_bitmap.appendNTimes(0, byte_size);
+    var j: u64 = 0;
+    while (j < bitset.capacity()) : (j += 1) {
+        var bit: u8 = 0;
+        if (bitset.isSet(j)) {
+            bit = 1;
+        }
+        packed_bitmap.items[j / 8] |= (bit << @truncate(@rem(j, 8)));
+    }
+
+    return packed_bitmap.items;
 }
 
 pub fn is_prefix(str: []const u8, prefix: []const u8) bool {

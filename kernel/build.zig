@@ -39,7 +39,16 @@ pub fn build(b: *std.Build) void {
     // Disable LTO. This prevents issues with limine requests
     kernel.want_lto = false;
 
-    // build_font.build_font();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    const font_file = std.fs.cwd().openFile("../cozette.bdf", .{}) catch std.debug.panic("unable to open font file", .{});
+    defer font_file.close();
+
+    const packed_font = build_font.build_font(font_file, allocator) catch std.debug.panic("unable to build font", .{});
+    const packed_font_file = std.fs.cwd().createFile("src/cozette-packed.bin", .{}) catch unreachable;
+    defer packed_font_file.close();
+
+    packed_font_file.writeAll(packed_font) catch unreachable;
 
     b.installArtifact(kernel);
 }

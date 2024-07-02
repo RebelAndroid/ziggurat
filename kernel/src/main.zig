@@ -10,8 +10,6 @@ const acpi = @import("acpi.zig");
 const serial_log = @import("serial-log.zig");
 const framebuffer_log = @import("framebuffer-log.zig");
 
-extern fn AcpiInitializeSubsystem() callconv(.C) void;
-
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent. In Zig, `export var` is what we use.
@@ -140,33 +138,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
 
     main_log.info("xsdp location: {}\n", .{xsdp});
 
-    main_log.info("framebuffer: {}\n", .{framebuffer});
-
-    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 0, 0, framebuffer.width, framebuffer.height, framebuffer_log.white);
-    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 50, 50, 50, 50, framebuffer_log.red);
-    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 200, 50, 50, 500, framebuffer_log.green);
-    framebuffer_log.draw_rect(framebuffer.address, framebuffer.pitch, 500, 500, 100, 20, framebuffer_log.blue);
-
-    const mask: [7]u8 = .{
-        0b00111100,
-        0b01000010,
-        0b10000001,
-        0b11111111,
-        0b10000001,
-        0b10000001,
-        0b10000001,
-    };
-
-    framebuffer_log.draw_masked_rect(
-        framebuffer.address,
-        framebuffer.pitch,
-        100,
-        100,
-        8,
-        7,
-        &mask,
-        framebuffer_log.blue,
-    );
+    framebuffer_log.init(framebuffer.address, framebuffer.pitch);
+    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "B") catch unreachable;
 
     main_log.info("done\n", .{});
     done();
