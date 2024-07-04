@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const GlyphBuilder = struct {
-    xoffset: ?u8 = null,
-    yoffset: ?u8 = null,
+    xoffset: ?i8 = null,
+    yoffset: ?i8 = null,
     width: ?u8 = null,
     height: ?u8 = null,
     encoding: ?u64 = null,
@@ -43,13 +43,13 @@ const GlyphBuilder = struct {
             }
             self.height = @intCast(parse2.value);
 
-            const parse3 = parse_first_int(line[(parse.end + parse2.end)..]);
+            const parse3 = parse_first_uint(line[(parse.end + parse2.end)..]);
             if (parse3.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
             self.xoffset = @intCast(parse3.value);
 
-            const parse4 = parse_first_int(line[(parse.end + parse2.end + parse3.end)..]);
+            const parse4 = parse_first_uint(line[(parse.end + parse2.end + parse3.end)..]);
             if (parse4.end == 0) {
                 std.debug.panic("unable to parse int on line: {s}", .{line});
             }
@@ -97,8 +97,8 @@ const GlyphBuilder = struct {
 };
 
 const Glyph = struct {
-    xoffset: u8,
-    yoffset: u8,
+    xoffset: i8,
+    yoffset: i8,
     width: u8,
     height: u8,
     encoding: u64,
@@ -194,8 +194,8 @@ const PackedGlyph = extern struct {
     bitmap_index: u64,
     width: u8,
     height: u8,
-    xoffset: u8,
-    yoffset: u8,
+    xoffset: i8,
+    yoffset: i8,
     xstride: u8,
     ystride: u8,
     /// reserved for future use
@@ -303,6 +303,31 @@ pub fn parse_first_int(str: []const u8) FirstInt {
     }
     if (start) |s| {
         const result: u64 = std.fmt.parseInt(u64, str[s..i], 10) catch return .{ .value = 0, .end = 0 };
+        return .{ .value = result, .end = i };
+    }
+    return .{ .value = 0, .end = 0 };
+}
+
+const FirstUint = struct {
+    value: i64,
+    end: u64,
+};
+
+pub fn parse_first_uint(str: []const u8) FirstUint {
+    var i: usize = 0;
+    var start: ?usize = null;
+    while (i < str.len) : (i += 1) {
+        if (start) |s| {
+            if (!std.ascii.isDigit(str[i]) and str[i] != '-') {
+                const result: i64 = std.fmt.parseInt(i64, str[s..i], 10) catch return .{ .value = 0, .end = 0 };
+                return .{ .value = result, .end = i };
+            }
+        } else if (std.ascii.isDigit(str[i]) or str[i] == '-') {
+            start = i;
+        }
+    }
+    if (start) |s| {
+        const result: i64 = std.fmt.parseInt(i64, str[s..i], 10) catch return .{ .value = 0, .end = 0 };
         return .{ .value = result, .end = i };
     }
     return .{ .value = 0, .end = 0 };

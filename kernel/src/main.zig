@@ -138,8 +138,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
 
     main_log.info("xsdp location: {}\n", .{xsdp});
 
-    framebuffer_log.init(framebuffer.address, framebuffer.pitch);
-    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "ABC DEF") catch unreachable;
+    framebuffer_log.init(framebuffer.address, framebuffer.pitch, framebuffer.width, framebuffer.height);
+    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "According to all known laws of aviation, there is no way that a bee should be able to fly. Its wings are too small to get its fat little body off the ground. The bee, of course, flies anyway because bees don't care what humans think is impossible. Yellow, black. Yellow, black. Yellow, black. Yellow, black. Ooh, black and yellow! Yeah, let's shake it up a little. Barry! Breakfast is ready! Coming! (phone rings) Oh, hang on a second. (adjusts his antennas into a headset) Hello? Barry? Adam? Can you believe this is happening?") catch unreachable;
 
     main_log.info("done\n", .{});
     done();

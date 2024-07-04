@@ -26,6 +26,7 @@
               qemu_kvm
               parted
               gdb
+              gptfdisk
             ];
           };
         }
