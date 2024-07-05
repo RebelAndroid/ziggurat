@@ -25,7 +25,7 @@ pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = serial_log.serial_log,
+    .logFn = framebuffer_log.framebuffer_log,
 };
 
 const main_log = std.log.scoped(.main);
@@ -62,7 +62,7 @@ export fn _start() callconv(.C) noreturn {
 
         // Get the first framebuffer's information.
         const framebuffer = framebuffer_response.framebuffers()[0];
-
+        framebuffer_log.init(framebuffer.address, framebuffer.pitch, framebuffer.width, framebuffer.height);
         if (hhdm_request.response) |hhdm_response| {
             if (memory_map_request.response) |memory_map_response| {
                 if (rsdp_request.response) |rsdp_response| {
@@ -89,7 +89,7 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
 }
 
-fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp, framebuffer: *limine.Framebuffer) noreturn {
+fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
@@ -137,9 +137,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     breakpoint();
 
     main_log.info("xsdp location: {}\n", .{xsdp});
-
-    framebuffer_log.init(framebuffer.address, framebuffer.pitch, framebuffer.width, framebuffer.height);
-    _ = framebuffer_log.framebuffer_print(framebuffer_log.framebuffer_writer.context, "According to all known laws of aviation, there is no way that a bee should be able to fly. Its wings are too small to get its fat little body off the ground. The bee, of course, flies anyway because bees don't care what humans think is impossible. Yellow, black. Yellow, black. Yellow, black. Yellow, black. Ooh, black and yellow! Yeah, let's shake it up a little. Barry! Breakfast is ready! Coming! (phone rings) Oh, hang on a second. (adjusts his antennas into a headset) Hello? Barry? Adam? Can you believe this is happening?") catch unreachable;
 
     main_log.info("done\n", .{});
     done();

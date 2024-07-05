@@ -48,15 +48,22 @@ pub const white: Color = .{ .r = 255, .g = 255, .b = 255 };
 pub const red: Color = .{ .r = 255, .g = 0, .b = 0 };
 pub const blue: Color = .{ .r = 0, .g = 0, .b = 255 };
 pub const green: Color = .{ .r = 0, .g = 255, .b = 0 };
+pub const black: Color = .{ .r = 0, .g = 0, .b = 0 };
 
 var context: Context = .{};
+
+pub fn framebuffer_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+    const scope_name = @tagName(scope);
+    const level_name = level.asText();
+    try framebuffer_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
+    try framebuffer_writer.print(format, args);
+}
 
 pub fn init(framebuffer: [*]u8, stride: u64, width: u64, height: u64) void {
     const header: *const FontHeader = @alignCast(@ptrCast(&font_file));
     const glyph_front: [*]PackedGlyph = @ptrFromInt(@intFromPtr(&font_file) + @sizeOf(FontHeader));
     const glyphs: []PackedGlyph = glyph_front[0..header.glyph_count];
     const bitmaps_front: [*]u8 = @ptrFromInt(@intFromPtr(glyph_front) + @sizeOf(PackedGlyph) * header.glyph_count);
-    // log.info("glyph front: {*}, bitmaps front: {*}\n", .{ glyph_front, bitmaps_front });
     const bitmaps: []u8 = bitmaps_front[0..header.bitmaps_size];
     context = .{
         .glyphs = glyphs,
@@ -84,13 +91,18 @@ pub fn framebuffer_print(_: Context, text: []const u8) WriteError!usize {
 
         var x: i64 = @as(i64, @intCast(context.x)) + @as(i64, glyph.xoffset);
         var y: i64 = @as(i64, @intCast(context.y)) - @as(i64, glyph.yoffset);
-        // log.info("x: {}, y: {}\n", .{ context.x, context.y });
-        // log.info("char: {c}, xoffset: {}, yoffset:{}, xstride: {}, ystride: {}\n", .{ char, glyph.xoffset, glyph.yoffset, glyph.xstride, glyph.ystride });
         if (x + glyph.width > context.height) {
             context.x = 4;
             context.y = context.y + context.header.ascent + context.header.descent + 4;
             x = @as(i64, @intCast(context.x)) + @as(i64, glyph.xoffset);
             y = @as(i64, @intCast(context.y)) - @as(i64, glyph.yoffset);
+        }
+        if (@as(u64, @intCast(y)) + context.header.descent + 4 > context.height) {
+            context.x = 4;
+            context.y = context.header.ascent + context.header.descent + 4;
+            x = @as(i64, @intCast(context.x)) + @as(i64, glyph.xoffset);
+            y = @as(i64, @intCast(context.y)) - @as(i64, glyph.yoffset);
+            draw_rect(context.framebuffer, context.stride, 0, 0, context.width, context.height, black);
         }
         draw_masked_rect(
             context.framebuffer,
@@ -100,7 +112,7 @@ pub fn framebuffer_print(_: Context, text: []const u8) WriteError!usize {
             glyph.width,
             glyph.height,
             bitmap,
-            blue,
+            white,
         );
         context.x += glyph.xstride;
         context.y += glyph.ystride;
