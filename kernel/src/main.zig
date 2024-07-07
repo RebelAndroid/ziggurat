@@ -146,6 +146,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
         const ptr: *acpi.SDTHeader = @ptrFromInt(p + hhdm_offset);
         main_log.info("signature: {s}\n", .{ptr.signature});
     }
+    const mcfg = xsdt.get_mcfg(hhdm_offset);
+    main_log.info("mcfg: {any}\n", .{mcfg});
 
     main_log.info("done\n", .{});
     done();

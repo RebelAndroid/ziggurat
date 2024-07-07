@@ -42,6 +42,34 @@ pub const Xsdt = extern struct {
         const length = @divExact(self.header.length - 36, 8);
         return start[0..length];
     }
+    pub fn get_mcfg(self: *Xsdt, hhdm_offset: u64) ?*Mcfg {
+        const pointers = self.get_pointers();
+        for (pointers) |p| {
+            const ptr: *SDTHeader = @ptrFromInt(p + hhdm_offset);
+            if (ptr.signature[0] == 'M' and ptr.signature[1] == 'C' and ptr.signature[2] == 'F' and ptr.signature[3] == 'G') {
+                return @ptrCast(ptr);
+            }
+        }
+        return null;
+    }
+};
+
+pub const Mcfg = extern struct {
+    header: SDTHeader,
+    _: u64 align(4),
+    pub fn get_entries(self: *Mcfg) []McfgEntry {
+        const start: [*]McfgEntry = @ptrFromInt(@intFromPtr(self) + @sizeOf(SDTHeader) + 8);
+        const length = @divExact(self.header.length - 44, 8);
+        return start[0..length];
+    }
+};
+
+pub const McfgEntry = extern struct {
+    base_address: u64 align(4),
+    segment_group_number: u16,
+    start_pci_bus_number: u8,
+    end_pci_bus_number: u8,
+    _: u32,
 };
 
 fn checksum_table(table: [*]u8, length: u64) bool {
@@ -56,4 +84,7 @@ fn checksum_table(table: [*]u8, length: u64) bool {
 test "acpi struct sizing" {
     try std.testing.expectEqual(36, @sizeOf(Xsdp));
     try std.testing.expectEqual(36, @sizeOf(SDTHeader));
+
+    try std.testing.expectEqual(16, @sizeOf(McfgEntry));
+    try std.testing.expectEqual(4, @alignOf(McfgEntry));
 }
