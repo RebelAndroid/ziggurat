@@ -22,9 +22,10 @@ pub fn build(b: *std.Build) void {
     // Build the kernel itself.
     const optimize = b.standardOptimizeOption(.{});
     const limine = b.dependency("limine", .{});
+    const lazy_path = std.Build.LazyPath{ .src_path = .{ .owner = b, .sub_path = "src/main.zig" } };
     const kernel = b.addExecutable(.{
         .name = "kernel",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = lazy_path,
         .target = b.resolveTargetQuery(target),
         .optimize = optimize,
         .code_model = .kernel,
@@ -32,7 +33,7 @@ pub fn build(b: *std.Build) void {
     });
 
     kernel.root_module.addImport("limine", limine.module("limine"));
-    kernel.setLinkerScriptPath(.{ .path = "linker.ld" });
+    kernel.setLinkerScriptPath(std.Build.LazyPath{ .src_path = .{ .owner = b, .sub_path = "linker.ld" } });
 
     kernel.pie = true;
 
