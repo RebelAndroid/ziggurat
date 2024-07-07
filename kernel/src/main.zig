@@ -137,6 +137,15 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
     breakpoint();
 
     main_log.info("xsdp location: {}\n", .{xsdp});
+    main_log.info("xsdp valid: {}\n", .{xsdp.valid_checksum()});
+    const xsdt = xsdp.get_xsdt(hhdm_offset);
+    main_log.info("xsdt location: {}\n", .{xsdt});
+    main_log.info("xsdt valid: {}\n", .{xsdt.header.valid_checksum()});
+    const xsdt_pointers = xsdt.get_pointers();
+    for (xsdt_pointers) |p| {
+        const ptr: *acpi.SDTHeader = @ptrFromInt(p + hhdm_offset);
+        main_log.info("signature: {s}\n", .{ptr.signature});
+    }
 
     main_log.info("done\n", .{});
     done();
