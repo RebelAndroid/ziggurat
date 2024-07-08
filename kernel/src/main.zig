@@ -9,6 +9,7 @@ const gdt = @import("x64/gdt.zig");
 const acpi = @import("acpi.zig");
 const serial_log = @import("serial-log.zig");
 const framebuffer_log = @import("framebuffer-log.zig");
+const pcie = @import("pcie.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -101,15 +102,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
-    main_log.info("vendor string: {s}\n", .{cpuid.get_vendor_string()});
-
     var current_gdtr: gdt.GdtDescriptor = std.mem.zeroes(gdt.GdtDescriptor);
     gdt.sgdt(&current_gdtr);
-    main_log.info("current gdtr: size: 0x{X}, offset: 0x{X}\n", .{ current_gdtr.size, current_gdtr.offset });
-    const gdt_entries = current_gdtr.get_entries();
-    for (gdt_entries) |e| {
-        main_log.info("gdt entry: base: {X}, limit: {X}, size: {}, executable: {}, long mode code: {}, type: {}, DPL: {}\n", .{ e.get_base(), e.get_limit(), e.size, e.executable, e.long_mode_code, e.descriptor_type, e.descriptor_privilege_level });
-    }
 
     gdt.load_gdt();
 
@@ -134,20 +128,20 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
 
     idt.load_idt();
 
-    breakpoint();
-
-    main_log.info("xsdp location: {}\n", .{xsdp});
-    main_log.info("xsdp valid: {}\n", .{xsdp.valid_checksum()});
     const xsdt = xsdp.get_xsdt(hhdm_offset);
-    main_log.info("xsdt location: {}\n", .{xsdt});
-    main_log.info("xsdt valid: {}\n", .{xsdt.header.valid_checksum()});
-    const xsdt_pointers = xsdt.get_pointers();
-    for (xsdt_pointers) |p| {
-        const ptr: *acpi.SDTHeader = @ptrFromInt(p + hhdm_offset);
-        main_log.info("signature: {s}\n", .{ptr.signature});
+    // const xsdt_pointers = xsdt.get_pointers();
+    // for (xsdt_pointers) |p| {
+    //     const ptr: *acpi.SDTHeader = @ptrFromInt(p + hhdm_offset);
+    //     main_log.info("signature: {s}\n", .{ptr.signature});
+    // }
+    if (xsdt.get_mcfg(hhdm_offset)) |mcfg| {
+        const mcfg_entries = mcfg.get_entries();
+        for (mcfg_entries) |e| {
+            pcie.get_devices(e, hhdm_offset);
+        }
+    } else {
+        main_log.err("no mcfg!", .{});
     }
-    const mcfg = xsdt.get_mcfg(hhdm_offset);
-    main_log.info("mcfg: {any}\n", .{mcfg});
 
     main_log.info("done\n", .{});
     done();
