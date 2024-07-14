@@ -14,8 +14,13 @@ const CommonHeader = extern struct {
     classcode: ClassCode,
     cache_line_size: u8,
     latency_timer: u8,
-    haeder_type: u8,
+    header_type: HeaderType,
     bist: u8,
+};
+
+const HeaderType = packed struct {
+    header_type: u7,
+    multi_function: bool,
 };
 
 const ClassCode = enum(u8) {
@@ -53,7 +58,17 @@ pub fn get_devices(bus_segment_group: acpi.McfgEntry, hhdm_offset: u64) void {
             const phyiscal_address = calc_physical_address(bus_segment_group.base_address, bus, device, 0);
             const ptr: *CommonHeader = @ptrFromInt(phyiscal_address + hhdm_offset);
             if (ptr.vendor_id != 0xFFFF) {
-                log.info("common header: {}\n", .{ptr});
+                log.info("bus: {}, dev: {}, func: {}: common header: {}\n", .{ bus, device, 0, ptr });
+            }
+            if (ptr.header_type.multi_function) {
+                var function: u8 = 1;
+                while (function < 8) : (function += 1) {
+                    const phys_addr = calc_physical_address(bus_segment_group.base_address, bus, device, function);
+                    const ptr2: *CommonHeader = @ptrFromInt(phys_addr + hhdm_offset);
+                    if (ptr2.vendor_id != 0xFFFF) {
+                        log.info("bus: {}, dev: {}, func: {}: common header: {}\n", .{ bus, device, function, ptr2 });
+                    }
+                }
             }
         }
     }
