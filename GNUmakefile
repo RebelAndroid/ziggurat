@@ -42,6 +42,7 @@ run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 zig-test:
 	zig test kernel/src/x64/page_table.zig
 	zig test kernel/src/acpi.zig
+	zig test kernel/src/x64/msr.zig
 
 ovmf:
 	mkdir -p ovmf

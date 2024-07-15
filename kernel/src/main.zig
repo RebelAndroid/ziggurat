@@ -10,6 +10,7 @@ const acpi = @import("acpi.zig");
 const serial_log = @import("serial-log.zig");
 const framebuffer_log = @import("framebuffer-log.zig");
 const pcie = @import("pcie.zig");
+const msr = @import("x64/msr.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -90,7 +91,7 @@ export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
 }
 
-fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
+fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
     };
@@ -128,20 +129,18 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, xsdp: *a
 
     idt.load_idt();
 
-    const xsdt = xsdp.get_xsdt(hhdm_offset);
-    // const xsdt_pointers = xsdt.get_pointers();
-    // for (xsdt_pointers) |p| {
-    //     const ptr: *acpi.SDTHeader = @ptrFromInt(p + hhdm_offset);
-    //     main_log.info("signature: {s}\n", .{ptr.signature});
+    // const xsdt = xsdp.get_xsdt(hhdm_offset);
+    // if (xsdt.get_mcfg(hhdm_offset)) |mcfg| {
+    //     const mcfg_entries = mcfg.get_entries();
+    //     for (mcfg_entries) |e| {
+    //         pcie.get_devices(e, hhdm_offset);
+    //     }
+    // } else {
+    //     main_log.err("no mcfg!", .{});
     // }
-    if (xsdt.get_mcfg(hhdm_offset)) |mcfg| {
-        const mcfg_entries = mcfg.get_entries();
-        for (mcfg_entries) |e| {
-            pcie.get_devices(e, hhdm_offset);
-        }
-    } else {
-        main_log.err("no mcfg!", .{});
-    }
+
+    const efer: msr.Efer = @bitCast(msr.read_msr(0xC0000080));
+    main_log.info("efer: {}", .{efer});
 
     main_log.info("done\n", .{});
     done();
