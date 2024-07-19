@@ -129,19 +129,23 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     idt.load_idt();
 
-    // const xsdt = xsdp.get_xsdt(hhdm_offset);
-    // if (xsdt.get_mcfg(hhdm_offset)) |mcfg| {
-    //     const mcfg_entries = mcfg.get_entries();
-    //     for (mcfg_entries) |e| {
-    //         pcie.get_devices(e, hhdm_offset);
-    //     }
-    // } else {
-    //     main_log.err("no mcfg!", .{});
-    // }
-
-    const efer: msr.Efer = @bitCast(msr.read_msr(0xC0000080));
-    main_log.info("efer: {}", .{efer});
+    // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
+    var efer: msr.Efer = msr.read_efer();
+    efer.system_call_extensions = true;
+    msr.write_efer(efer);
 
     main_log.info("done\n", .{});
     done();
+}
+
+pub extern fn jump_to_user_mode(entry_point: u64, rflags: u64) callconv(.C) void;
+comptime {
+    asm (
+        \\.globl jump_to_user_mode
+        \\.type jump_to_user_mode @function
+        \\jump_to_user_mode:
+        \\  movq %rdi, %rcx
+        \\  movq %rsi, %r11
+        \\  sysretq
+    );
 }

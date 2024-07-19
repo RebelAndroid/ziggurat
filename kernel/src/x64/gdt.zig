@@ -14,8 +14,9 @@ pub const GdtDescriptor = packed struct {
     }
 };
 
+/// See Intel SDM Volume 3 Section 3.4.5 "Segment Descriptors"
 pub const GdtEntry = packed struct {
-    limit1: u16 = 0,
+    limit1: u16 = 0xFFFF,
     base1: u16 = 0,
     base2: u8 = 0,
     accessed: bool = false,
@@ -31,7 +32,7 @@ pub const GdtEntry = packed struct {
     descriptor_type: bool = true,
     descriptor_privilege_level: u2,
     present: bool = true,
-    limit2: u4 = 0,
+    limit2: u4 = 0xF,
     _1: bool = false,
     /// this descriptor defines a 64-bit code segment if set
     long_mode_code: bool,
@@ -40,6 +41,7 @@ pub const GdtEntry = packed struct {
     /// scale limit by 1 if clear, scale limit by 4KiB if set
     granularity: bool,
     base3: u8 = 0,
+
     pub fn get_base(self: GdtEntry) u64 {
         return @as(u64, self.base1) | (@as(u64, self.base2) << 16) | (@as(u64, self.base3) << 24);
     }
@@ -66,47 +68,119 @@ pub const SegmentSelector = packed struct {
     selector_index: u13,
 };
 
+const kernel_data_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = 2,
+};
+const kernel_code_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = 1,
+};
+
+const user_data_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 3,
+    .table_indicator = false,
+    .selector_index = 4,
+};
+const user_code_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 3,
+    .table_indicator = false,
+    .selector_index = 3,
+};
+
 pub fn load_gdt() void {
     // The first gdt entry is always a null descriptor
     Gdt[0] = std.mem.zeroes(GdtEntry);
     // The second entry will be the kernel code segment
-    Gdt[1] = GdtEntry{
-        .executable = true,
-        .rw = false,
-        .descriptor_privilege_level = 0,
-        .direction_conforming = false,
-        .granularity = false,
-        .size = false,
-        .long_mode_code = true,
-    };
-    // The third entry will be the kernel data segment
-    Gdt[2] = GdtEntry{
-        .executable = false,
+    // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
+    Gdt[kernel_code_segment_selector.selector_index] = GdtEntry{
+        // CS.Base := 0, default base
+        // CS.Limit := 0xFFFFF, default limit
+        // CS.TYPE := 11
+        .accessed = true,
         .rw = true,
-        .descriptor_privilege_level = 0,
         .direction_conforming = false,
-        .granularity = false,
+        .executable = true,
+        // CS.S := 1
+        .descriptor_type = true,
+        // CS.DPL := 0
+        .descriptor_privilege_level = 0,
+        // CS.P := 1, default present
+        // CS.L := 1
+        .long_mode_code = true,
+        // CS.D := 0
         .size = false,
+        // CS.G := 1
+        .granularity = true,
+    };
+
+    // The third entry will be the kernel data segment
+    // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
+    Gdt[kernel_data_segment_selector.selector_index] = GdtEntry{
+        // SS.Base := 0, default base
+        // SS.Limit := 0xFFFFF, default limit
+        // SS.Type := 3
+        .accessed = true,
+        .rw = true,
+        .direction_conforming = false,
+        .executable = false,
+        // SS.S := 1
+        .descriptor_type = true,
+        // SS.DPL := 0
+        .descriptor_privilege_level = 0,
+        // SS.P := 1, default present
+        // SS.B := 1
+        .size = true,
+        // SS.G := 1
+        .granularity = true,
+
         .long_mode_code = false,
     };
+
     // The fourth entry will be the user code segment
-    Gdt[3] = GdtEntry{
-        .executable = true,
-        .rw = false,
-        .descriptor_privilege_level = 3,
+    // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
+    Gdt[user_code_segment_selector.selector_index] = GdtEntry{
+        // CS.Base := 0, default base
+        // CS.Limit := 0xFFFFF, default limit
+        // CS.Type := 11
+        .accessed = true,
+        .rw = true,
         .direction_conforming = false,
-        .granularity = false,
-        .size = false,
+        .executable = true,
+        // CS.S := 1
+        .descriptor_type = true,
+        // CS.DPL := 3
+        .descriptor_privilege_level = 3,
+        // CS.P := 1, default present
+        // CS.L := 1
         .long_mode_code = true,
+        // CS.D := 0
+        .size = false,
+        // CS.G := 1
+        .granularity = true,
     };
     // The fifth entry will be the user data segment
-    Gdt[4] = GdtEntry{
-        .executable = false,
+    // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
+    Gdt[user_data_segment_selector.selector_index] = GdtEntry{
+        // SS.Base := 0, default base
+        // SS.Limit := 0xFFFFF, default limit
+        // SS.Type := 3
+        .accessed = true,
         .rw = true,
-        .descriptor_privilege_level = 3,
         .direction_conforming = false,
-        .granularity = false,
-        .size = false,
+        .executable = false,
+        // SS.S := 1
+        .descriptor_type = true,
+        // SS.DPL := 3
+        .descriptor_privilege_level = 3,
+        // SS.P := 1, default present
+        // SS.B := 1
+        .size = true,
+        // SS.G := 1
+        .granularity = true,
+
         .long_mode_code = false,
     };
 
@@ -114,18 +188,9 @@ pub fn load_gdt() void {
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
     const x = @intFromPtr(&GdtR);
     lgdt(x);
-    const data_segment_selector = SegmentSelector{
-        .requestor_privilege_level = 0,
-        .table_indicator = false,
-        .selector_index = 2,
-    };
-    const code_segment_selector = SegmentSelector{
-        .requestor_privilege_level = 0,
-        .table_indicator = false,
-        .selector_index = 1,
-    };
-    set_data_segment_registers(data_segment_selector);
-    set_code_segment_register(code_segment_selector, @intFromPtr(&set_code_segment_register_2));
+
+    set_data_segment_registers(kernel_data_segment_selector);
+    set_code_segment_register(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 }
 
 pub extern fn lgdt(u64) callconv(.C) void;

@@ -13,6 +13,21 @@ comptime {
     );
 }
 
+pub extern fn write_msr(msr: u32, value: u64) callconv(.C) void;
+comptime {
+    asm (
+        \\.globl write_msr
+        \\.type write_msr @function
+        \\write_msr:
+        \\  movl %edi, %ecx
+        \\  movq %rsi, %rax
+        \\  movq %rsi, %rdx
+        \\  shrq $32, %rdx
+        \\  wrmsr
+        \\  retq
+    );
+}
+
 pub const Efer = packed struct {
     system_call_extensions: bool,
     _1: u7,
@@ -26,6 +41,14 @@ pub const Efer = packed struct {
     translation_cache_extension: bool,
     _3: u48,
 };
+
+pub fn read_efer() Efer {
+    return @bitCast(read_msr(0xC0000080));
+}
+
+pub fn write_efer(efer: Efer) void {
+    write_msr(0xC0000080, @bitCast(efer));
+}
 
 test "msr sizes" {
     try std.testing.expectEqual(64, @bitSizeOf(Efer));
