@@ -1,11 +1,12 @@
 const std = @import("std");
+const gdt = @import("gdt.zig");
 
 pub var IDT: [256]IdtEntry = std.mem.zeroes([256]IdtEntry);
 pub var IdtR: IdtDescriptor = std.mem.zeroes(IdtDescriptor);
 
 pub const IdtEntry = packed struct {
     offset1: u16 = 0,
-    segment_selector: u16,
+    segment_selector: gdt.SegmentSelector,
     ist: u3,
     _1: u5 = 0,
     gate_type: u4,

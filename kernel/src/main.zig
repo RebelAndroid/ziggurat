@@ -27,7 +27,7 @@ pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = framebuffer_log.framebuffer_log,
+    .logFn = serial_log.serial_log,
 };
 
 const main_log = std.log.scoped(.main);
@@ -79,16 +79,27 @@ export fn _start() callconv(.C) noreturn {
     done();
 }
 
-export fn page_fault_handler() callconv(.Interrupt) void {
+export fn page_fault_handler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
     const address = asm volatile (
         \\movq %CR2, %rax
         : [ret] "= {rax}" (-> usize),
     );
-    main_log.err("page fault! occured at address: 0x{X}\n", .{address});
+    main_log.err("page fault! At address: 0x{x} with error code: 0x{x}\n", .{ address, err });
+    done();
 }
 
 export fn breakpoint_handler() callconv(.Interrupt) void {
     main_log.info("breakpoint!\n", .{});
+}
+
+export fn genprot_handler() callconv(.Interrupt) noreturn {
+    main_log.info("General Protection Fault!\n", .{});
+    done();
+}
+
+export fn double_fault_handler() callconv(.Interrupt) noreturn {
+    main_log.info("Double Fault!\n", .{});
+    done();
 }
 
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
@@ -109,7 +120,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     gdt.load_gdt();
 
     var breakpoint_entry: idt.IdtEntry = .{
-        .segment_selector = (1 << 3),
+        .segment_selector = gdt.kernel_code_segment_selector,
         .ist = 0,
         .gate_type = 0xF,
         .dpl = 0,
@@ -117,14 +128,32 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
 
     var page_fault_entry: idt.IdtEntry = .{
-        .segment_selector = (1 << 3),
+        .segment_selector = gdt.kernel_code_segment_selector,
         .ist = 0,
         .gate_type = 0xF,
         .dpl = 0,
     };
     page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
 
+    var genprot_entry: idt.IdtEntry = .{
+        .segment_selector = gdt.kernel_code_segment_selector,
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    genprot_entry.setOffset(@intFromPtr(&genprot_handler));
+
+    var double_fault_entry: idt.IdtEntry = .{
+        .segment_selector = gdt.kernel_code_segment_selector,
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    double_fault_entry.setOffset(@intFromPtr(&double_fault_handler));
+
     idt.IDT[3] = breakpoint_entry;
+    idt.IDT[8] = double_fault_entry;
+    idt.IDT[0xD] = genprot_entry;
     idt.IDT[0xE] = page_fault_entry;
 
     idt.load_idt();
@@ -134,6 +163,17 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     efer.system_call_extensions = true;
     msr.write_efer(efer);
 
+    msr.write_star(msr.Star{
+        .kernel_cs_selector = gdt.kernel_code_segment_selector,
+        .user_cs_selector = gdt.user_code_segment_selector,
+    });
+
+    main_log.info("jumping to user mode!\n", .{});
+    main_log.info("user_mode: 0x{x}!\n", .{@intFromPtr(&user_mode)});
+    main_log.info("page_fault_handler: 0x{x}!\n", .{@intFromPtr(&page_fault_handler)});
+    // const bad_ptr: *u8 = @ptrFromInt(0x69);
+    // main_log.info("causing a page fault! {}", .{bad_ptr.*});
+    jump_to_user_mode(@intFromPtr(&user_mode), 0x202);
     main_log.info("done\n", .{});
     done();
 }
@@ -148,4 +188,11 @@ comptime {
         \\  movq %rsi, %r11
         \\  sysretq
     );
+}
+
+pub fn user_mode() noreturn {
+    // asm volatile ("int $3");
+    while (true) {
+        asm volatile ("hlt");
+    }
 }

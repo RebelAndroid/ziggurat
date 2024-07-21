@@ -1,4 +1,6 @@
 const std = @import("std");
+const gdt = @import("gdt.zig");
+
 pub extern fn read_msr(msr: u32) callconv(.C) u64;
 comptime {
     asm (
@@ -50,6 +52,41 @@ pub fn write_efer(efer: Efer) void {
     write_msr(0xC0000080, @bitCast(efer));
 }
 
+pub const Star = packed struct {
+    _1: u32 = 0,
+    kernel_cs_selector: gdt.SegmentSelector,
+    user_cs_selector: gdt.SegmentSelector,
+};
+
+pub fn read_star() Star {
+    return @bitCast(read_msr(0xC0000081));
+}
+
+pub fn write_star(star: Star) void {
+    write_msr(0xC0000081, @bitCast(star));
+}
+
+/// IA32_LSTAR is the target off syscall
+pub fn read_lstar() u64 {
+    return @bitCast(read_msr(0xC0000082));
+}
+
+/// IA32_LSTAR is the target off syscall
+pub fn write_lstar(lstar: u64) u64 {
+    write_msr(0xC0000081, @bitCast(lstar));
+}
+
+/// IA32_FMASK controls rflags
+pub fn read_fmask() u64 {
+    return @bitCast(read_msr(0xC0000084));
+}
+
+/// IA32_FMASK controls rflags
+pub fn write_fmask(fmask: u64) u64 {
+    write_msr(0xC0000084, @bitCast(fmask));
+}
+
 test "msr sizes" {
     try std.testing.expectEqual(64, @bitSizeOf(Efer));
+    try std.testing.expectEqual(64, @bitSizeOf(Star));
 }

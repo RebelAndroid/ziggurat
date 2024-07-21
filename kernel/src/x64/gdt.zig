@@ -68,23 +68,23 @@ pub const SegmentSelector = packed struct {
     selector_index: u13,
 };
 
-const kernel_data_segment_selector = SegmentSelector{
+pub const kernel_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
     .selector_index = 2,
 };
-const kernel_code_segment_selector = SegmentSelector{
+pub const kernel_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
     .selector_index = 1,
 };
 
-const user_data_segment_selector = SegmentSelector{
+pub const user_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
     .selector_index = 4,
 };
-const user_code_segment_selector = SegmentSelector{
+pub const user_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
     .selector_index = 3,
