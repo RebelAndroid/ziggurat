@@ -28,7 +28,7 @@ run: $(IMAGE_NAME).iso
 
 .PHONY: run-uefi
 run-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot  -d int
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot
 
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd
@@ -43,6 +43,7 @@ zig-test:
 	zig test kernel/src/x64/page_table.zig
 	zig test kernel/src/acpi.zig
 	zig test kernel/src/x64/msr.zig
+	zig test kernel/src/elf.zig
 
 ovmf:
 	mkdir -p ovmf
@@ -54,8 +55,13 @@ limine/limine:
 	$(MAKE) -C limine
 
 .PHONY: kernel
-kernel:
+kernel: init
 	cd kernel && zig build $(KZIGFLAGS)
+
+.PHONY: init
+init:
+	cd init && zig build -Doptimize=ReleaseSmall
+	cp init/zig-out/bin/init kernel/src
 
 $(IMAGE_NAME).iso: limine/limine kernel
 	rm -rf iso_root

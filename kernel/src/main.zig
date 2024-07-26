@@ -11,6 +11,7 @@ const serial_log = @import("serial-log.zig");
 const framebuffer_log = @import("framebuffer-log.zig");
 const pcie = @import("pcie.zig");
 const msr = @import("x64/msr.zig");
+const elf = @import("elf.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -20,10 +21,9 @@ pub export var hhdm_request: limine.HhdmRequest = .{};
 pub export var memory_map_request: limine.MemoryMapRequest = .{};
 pub export var rsdp_request: limine.RsdpRequest = .{};
 
-// Set the base revision to 2, this is recommended as this is the latest
-// base revision described by the Limine boot protocol specification.
-// See specification for further info.
 pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
+
+const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
@@ -79,29 +79,6 @@ export fn _start() callconv(.C) noreturn {
     done();
 }
 
-export fn page_fault_handler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
-    const address = asm volatile (
-        \\movq %CR2, %rax
-        : [ret] "= {rax}" (-> usize),
-    );
-    main_log.err("page fault! At address: 0x{x} with error code: 0x{x}\n", .{ address, err });
-    done();
-}
-
-export fn breakpoint_handler() callconv(.Interrupt) void {
-    main_log.info("breakpoint!\n", .{});
-}
-
-export fn genprot_handler() callconv(.Interrupt) noreturn {
-    main_log.info("General Protection Fault!\n", .{});
-    done();
-}
-
-export fn double_fault_handler() callconv(.Interrupt) noreturn {
-    main_log.info("Double Fault!\n", .{});
-    done();
-}
-
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
@@ -119,43 +96,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     gdt.load_gdt();
 
-    var breakpoint_entry: idt.IdtEntry = .{
-        .segment_selector = gdt.kernel_code_segment_selector,
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
-
-    var page_fault_entry: idt.IdtEntry = .{
-        .segment_selector = gdt.kernel_code_segment_selector,
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
-
-    var genprot_entry: idt.IdtEntry = .{
-        .segment_selector = gdt.kernel_code_segment_selector,
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    genprot_entry.setOffset(@intFromPtr(&genprot_handler));
-
-    var double_fault_entry: idt.IdtEntry = .{
-        .segment_selector = gdt.kernel_code_segment_selector,
-        .ist = 0,
-        .gate_type = 0xF,
-        .dpl = 0,
-    };
-    double_fault_entry.setOffset(@intFromPtr(&double_fault_handler));
-
-    idt.IDT[3] = breakpoint_entry;
-    idt.IDT[8] = double_fault_entry;
-    idt.IDT[0xD] = genprot_entry;
-    idt.IDT[0xE] = page_fault_entry;
-
     idt.load_idt();
 
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
@@ -168,12 +108,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         .user_cs_selector = gdt.user_code_segment_selector,
     });
 
-    main_log.info("jumping to user mode!\n", .{});
-    main_log.info("user_mode: 0x{x}!\n", .{@intFromPtr(&user_mode)});
-    main_log.info("page_fault_handler: 0x{x}!\n", .{@intFromPtr(&page_fault_handler)});
-    // const bad_ptr: *u8 = @ptrFromInt(0x69);
-    // main_log.info("causing a page fault! {}", .{bad_ptr.*});
-    jump_to_user_mode(@intFromPtr(&user_mode), 0x202);
+    elf.load_elf(&init_file);
+
     main_log.info("done\n", .{});
     done();
 }

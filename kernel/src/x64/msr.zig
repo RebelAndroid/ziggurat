@@ -66,13 +66,13 @@ pub fn write_star(star: Star) void {
     write_msr(0xC0000081, @bitCast(star));
 }
 
-/// IA32_LSTAR is the target off syscall
+/// IA32_LSTAR is the target of syscall
 pub fn read_lstar() u64 {
     return @bitCast(read_msr(0xC0000082));
 }
 
-/// IA32_LSTAR is the target off syscall
-pub fn write_lstar(lstar: u64) u64 {
+/// IA32_LSTAR is the target of syscall
+pub fn write_lstar(lstar: u64) void {
     write_msr(0xC0000081, @bitCast(lstar));
 }
 
