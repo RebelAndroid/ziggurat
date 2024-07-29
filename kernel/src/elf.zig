@@ -32,7 +32,7 @@ pub const Header = extern struct {
 };
 
 pub const ProgramHeader = extern struct {
-    typ: u32,
+    typ: ProgramHeaderType,
     flags: ProgramHeaderFlags,
     offset: u64,
     virtual_address: u64,
@@ -43,14 +43,19 @@ pub const ProgramHeader = extern struct {
 };
 
 pub const ProgramHeaderType = enum(u32) {
-    None = 0,
-    Load = 1,
-    Dynamic = 2,
-    Interp = 3,
-    Note = 4,
-    Shlib = 5,
-    Phdr = 6,
-    Tls = 7,
+    none = 0,
+    load = 1,
+    dynamic = 2,
+    interp = 3,
+    note = 4,
+    shlib = 5,
+    phdr = 6,
+    tls = 7,
+    gnu_eh_frame = 0x60000000 + 0x474e550,
+    gnu_stack = 0x60000000 + 0x474e551,
+    gnu_relro = 0x60000000 + 0x474e552,
+    gnu_property = 0x60000000 + 0x474e553,
+    _,
 };
 
 pub const ProgramHeaderFlags = packed struct {
@@ -62,8 +67,8 @@ pub const ProgramHeaderFlags = packed struct {
 
 pub const SectionHeader = extern struct {
     name: u32,
-    typ: u32,
-    flags: u64,
+    typ: SectionHeaderType,
+    flags: SectionHeaderFlags,
     address: u64,
     offset: u64,
     size: u64,
@@ -71,6 +76,45 @@ pub const SectionHeader = extern struct {
     info: u32,
     address_align: u64,
     entry_size: u64,
+};
+
+pub const SectionHeaderType = enum(u32) {
+    none = 0,
+    progbits = 1,
+    symbol_table = 2,
+    string_table = 3,
+    rela = 4,
+    symbol_hash_table = 5,
+    dynamic = 6,
+    note = 7,
+    nobits = 8,
+    rel = 9,
+    _1 = 10,
+    dyn_sym = 11,
+    init_array = 14,
+    fini_array = 15,
+    preinit_array = 16,
+    group = 17,
+    symbol_table_shndx = 18,
+    _,
+};
+
+pub const SectionHeaderFlags = packed struct {
+    writable: bool,
+    alloc: bool,
+    executable: bool,
+    merge: bool,
+    strings: bool,
+    info_link: bool,
+    link_order: bool,
+    os_nonconforming: bool,
+    group: bool,
+    tls: bool,
+    compressed: bool,
+    _1: u9,
+    os_flags: u8,
+    processor_flags: u4,
+    _2: u32,
 };
 
 pub fn load_elf(file: []align(8) const u8) void {
@@ -99,6 +143,11 @@ pub fn load_elf(file: []align(8) const u8) void {
     for (section_header_table) |sheader| {
         log.info("section header: {}\n", .{sheader});
     }
+    if (section_header_table[0].size != 0 or section_header_table[0].link != 0) {
+        // If these fields are non-zero they hold the actual number of section header entries and index of the string table section
+        log.err("TODO", .{});
+        return;
+    }
 }
 
 test "elf sizes" {
@@ -106,4 +155,5 @@ test "elf sizes" {
     try std.testing.expectEqual(56, @sizeOf(ProgramHeader));
     try std.testing.expectEqual(64, @sizeOf(SectionHeader));
     try std.testing.expectEqual(32, @bitSizeOf(ProgramHeaderFlags));
+    try std.testing.expectEqual(64, @bitSizeOf(SectionHeaderFlags));
 }

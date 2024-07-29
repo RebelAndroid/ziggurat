@@ -90,7 +90,7 @@ pub const user_code_segment_selector = SegmentSelector{
     .selector_index = 3,
 };
 
-pub fn load_gdt() void {
+pub fn loadGdt() void {
     // The first gdt entry is always a null descriptor
     Gdt[0] = std.mem.zeroes(GdtEntry);
     // The second entry will be the kernel code segment
@@ -189,11 +189,11 @@ pub fn load_gdt() void {
     const x = @intFromPtr(&GdtR);
     lgdt(x);
 
-    set_data_segment_registers(kernel_data_segment_selector);
-    set_code_segment_register(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
+    setDataSegmentRegisters(kernel_data_segment_selector);
+    setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 }
 
-pub extern fn lgdt(u64) callconv(.C) void;
+extern fn lgdt(u64) callconv(.C) void;
 comptime {
     asm (
         \\.globl lgdt
@@ -204,7 +204,7 @@ comptime {
     );
 }
 
-pub extern fn sgdt(*GdtDescriptor) callconv(.C) void;
+extern fn sgdt(*GdtDescriptor) callconv(.C) void;
 comptime {
     asm (
         \\.globl sgdt
@@ -215,12 +215,12 @@ comptime {
     );
 }
 
-pub extern fn set_data_segment_registers(SegmentSelector) callconv(.C) void;
+extern fn setDataSegmentRegisters(SegmentSelector) callconv(.C) void;
 comptime {
     asm (
-        \\.globl set_data_segment_registers
-        \\.type set_data_segment_registers @function
-        \\set_data_segment_registers:
+        \\.globl setDataSegmentRegisters
+        \\.type setDataSegmentRegisters @function
+        \\setDataSegmentRegisters:
         \\  movw %di, %es
         \\  movw %di, %ss
         \\  movw %di, %ds
@@ -230,15 +230,15 @@ comptime {
     );
 }
 
-pub extern fn set_code_segment_register(SegmentSelector, u64) callconv(.C) void;
+extern fn setCodeSegmentRegisters(SegmentSelector, u64) callconv(.C) void;
 extern fn set_code_segment_register_2() callconv(.C) void;
 comptime {
     asm (
-        \\.globl set_code_segment_register
+        \\.globl setCodeSegmentRegisters
         \\.globl set_code_segment_register_2
-        \\.type set_code_segment_register @function
+        \\.type setCodeSegmentRegisters @function
         \\.type set_code_segment_register_2 @function
-        \\set_code_segment_register:
+        \\setCodeSegmentRegisters:
         \\  push %rdi
         \\  push %rsi
         \\  lretq

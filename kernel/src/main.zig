@@ -91,12 +91,9 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
-    var current_gdtr: gdt.GdtDescriptor = std.mem.zeroes(gdt.GdtDescriptor);
-    gdt.sgdt(&current_gdtr);
+    gdt.loadGdt();
 
-    gdt.load_gdt();
-
-    idt.load_idt();
+    idt.loadIdt();
 
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
     var efer: msr.Efer = msr.read_efer();

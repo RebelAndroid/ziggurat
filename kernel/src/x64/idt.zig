@@ -31,7 +31,7 @@ pub const IdtDescriptor = packed struct {
     offset: u64,
 };
 
-pub extern fn lidt(u64) callconv(.C) void;
+extern fn lidt(u64) callconv(.C) void;
 comptime {
     asm (
         \\.globl lidt
@@ -48,7 +48,7 @@ inline fn done() noreturn {
     }
 }
 
-export fn page_fault_handler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
+export fn pageFaultHandler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
     const address = asm volatile (
         \\movq %CR2, %rax
         : [ret] "= {rax}" (-> usize),
@@ -57,28 +57,28 @@ export fn page_fault_handler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
     done();
 }
 
-export fn breakpoint_handler() callconv(.Interrupt) void {
+export fn breakpointHandler() callconv(.Interrupt) void {
     log.info("breakpoint!\n", .{});
 }
 
-export fn genprot_handler() callconv(.Interrupt) noreturn {
+export fn generalProtectionHandler() callconv(.Interrupt) noreturn {
     log.info("General Protection Fault!\n", .{});
     done();
 }
 
-export fn double_fault_handler() callconv(.Interrupt) noreturn {
+export fn doubleFaultHandler() callconv(.Interrupt) noreturn {
     log.info("Double Fault!\n", .{});
     done();
 }
 
-pub fn set_idt_entires() void {
+fn setIdtEntries() void {
     var breakpoint_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
         .ist = 0,
         .gate_type = 0xF,
         .dpl = 0,
     };
-    breakpoint_entry.setOffset(@intFromPtr(&breakpoint_handler));
+    breakpoint_entry.setOffset(@intFromPtr(&breakpointHandler));
 
     var page_fault_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
@@ -86,7 +86,7 @@ pub fn set_idt_entires() void {
         .gate_type = 0xF,
         .dpl = 0,
     };
-    page_fault_entry.setOffset(@intFromPtr(&page_fault_handler));
+    page_fault_entry.setOffset(@intFromPtr(&pageFaultHandler));
 
     var genprot_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
@@ -94,7 +94,7 @@ pub fn set_idt_entires() void {
         .gate_type = 0xF,
         .dpl = 0,
     };
-    genprot_entry.setOffset(@intFromPtr(&genprot_handler));
+    genprot_entry.setOffset(@intFromPtr(&generalProtectionHandler));
 
     var double_fault_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
@@ -102,7 +102,7 @@ pub fn set_idt_entires() void {
         .gate_type = 0xF,
         .dpl = 0,
     };
-    double_fault_entry.setOffset(@intFromPtr(&double_fault_handler));
+    double_fault_entry.setOffset(@intFromPtr(&doubleFaultHandler));
 
     IDT[3] = breakpoint_entry;
     IDT[8] = double_fault_entry;
@@ -110,8 +110,8 @@ pub fn set_idt_entires() void {
     IDT[0xE] = page_fault_entry;
 }
 
-pub fn load_idt() void {
-    set_idt_entires();
+pub fn loadIdt() void {
+    setIdtEntries();
     IdtR.size = @sizeOf(@TypeOf(IDT)) - 1;
     IdtR.offset = @intFromPtr(&IDT);
     const x = @intFromPtr(&IdtR);
