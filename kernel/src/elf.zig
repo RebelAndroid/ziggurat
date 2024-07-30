@@ -117,7 +117,7 @@ pub const SectionHeaderFlags = packed struct {
     _2: u32,
 };
 
-pub fn load_elf(file: []align(8) const u8) void {
+pub fn loadElf(file: []align(8) const u8) void {
     const header: *const Header = @ptrCast(file);
     log.info("ELF header: {}\n", .{header});
     if (header.magic[0] != 0x7f or header.magic[1] != 'E' or header.magic[2] != 'L' or header.magic[3] != 'F') {

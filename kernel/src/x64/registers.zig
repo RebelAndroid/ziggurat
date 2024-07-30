@@ -18,27 +18,27 @@ pub const CR3 = packed struct {
             return 1;
         }
 
-        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.get_pdpt()});
-        const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
+        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.getPdpt()});
+        const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         const pdpte = pdpt[addr.directory_pointer];
         if (!pdpte.huge_page.present) {
             return 2;
         }
-        if (pdpte.is_huge_page()) {
+        if (pdpte.isHugePage()) {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
             return (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
         } else {
-            log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.get_page_directory()});
-            const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
+            log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.getPageDirectory()});
+            const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
             const pde = pd[addr.directory];
             if (!pde.huge_page.present) {
                 return 3;
             }
-            if (pde.is_huge_page()) {
+            if (pde.isHugePage()) {
                 return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
             } else {
-                log.debug("using page table at: 0x{X}\n", .{pde.page_table.get_page_table()});
-                const pt: *page_table.Pt = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
+                log.debug("using page table at: 0x{X}\n", .{pde.page_table.getPageTable()});
+                const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
                 const pte = pt[addr.table];
                 if (!pte.present) {
                     return 4;
@@ -86,11 +86,11 @@ pub const CR3 = packed struct {
                 .accessed = false,
                 .execute_disable = false,
             };
-            pml4e.set_pdpt(frame);
+            pml4e.setPdpt(frame);
         }
         // we now have a valid pml4e
-        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.get_pdpt()});
-        const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.get_pdpt() + hhdm_offset);
+        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.getPdpt()});
+        const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         var pdpte: *volatile page_table.PdptEntry = &pdpt[addr.directory_pointer];
         if (page_type == page_table.PageType.one_gb) {
             log.debug("mapping 1GB page", .{});
@@ -108,7 +108,7 @@ pub const CR3 = packed struct {
             if (physical_address & 0x3FFFFFFF != 0) {
                 return MapError.Unaligned;
             }
-            pdpte.huge_page.set_page(physical_address);
+            pdpte.huge_page.setPage(physical_address);
             return;
         }
         if (!pdpte.page_directory.present) {
@@ -127,15 +127,15 @@ pub const CR3 = packed struct {
                 .accessed = false,
                 .execute_disable = false,
             };
-            pdpte.page_directory.set_page_directory(frame);
+            pdpte.page_directory.setPageDirectory(frame);
         }
-        if (pdpte.is_huge_page()) {
+        if (pdpte.isHugePage()) {
             // we are trying to map a smaller page that is part of an already mapped huge page
             return MapError.AlreadyPresent;
         }
         // we now have a valid pdpte
-        log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.get_page_directory()});
-        const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.get_page_directory() + hhdm_offset);
+        log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.getPageDirectory()});
+        const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
         var pde: *volatile page_table.PdEntry = &pd[addr.directory];
         log.debug("pde: {}\n", .{pde.page_table});
         if (page_type == page_table.PageType.two_mb) {
@@ -152,7 +152,7 @@ pub const CR3 = packed struct {
                 .accessed = false,
                 .execute_disable = false,
             };
-            pde.huge_page.set_page(physical_address);
+            pde.huge_page.setPage(physical_address);
             return;
         }
         if (!pde.page_table.present) {
@@ -171,15 +171,15 @@ pub const CR3 = packed struct {
                 .accessed = false,
                 .execute_disable = false,
             };
-            pde.page_table.set_page_table(frame);
+            pde.page_table.setPageTable(frame);
         }
-        if (pde.is_huge_page()) {
+        if (pde.isHugePage()) {
             // we are trying to map a smaller page that is part of an already mapped huge page
             return MapError.AlreadyPresent;
         }
         // we now have a valid pde, additionally, we are mapping a 4kb page
-        log.debug("using page table at: 0x{X}\n", .{pde.page_table.get_page_table()});
-        const pt: *page_table.Pt = @ptrFromInt(pde.page_table.get_page_table() + hhdm_offset);
+        log.debug("using page table at: 0x{X}\n", .{pde.page_table.getPageTable()});
+        const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
         var pte: *volatile page_table.PtEntry = &pt[addr.table];
         if (pte.present) {
             return MapError.AlreadyPresent;
@@ -193,7 +193,7 @@ pub const CR3 = packed struct {
             .accessed = false,
             .execute_disable = false,
         };
-        pte.set_page(physical_address);
+        pte.setPage(physical_address);
         return;
     }
 };

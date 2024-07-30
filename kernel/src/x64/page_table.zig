@@ -24,10 +24,10 @@ pub const PML4Entry = packed struct {
     pdpt: u40 = 0,
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_pdpt(self: PML4Entry) u64 {
+    pub fn getPdpt(self: PML4Entry) u64 {
         return @as(u64, self.pdpt) << 12;
     }
-    pub fn set_pdpt(self: *volatile PML4Entry, pdpt: u64) void {
+    pub fn setPdpt(self: *volatile PML4Entry, pdpt: u64) void {
         self.pdpt = @truncate(pdpt >> 12);
     }
 };
@@ -67,7 +67,7 @@ pub const PdptEntry_1GB = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PdptEntry_1GB, page: u64) void {
+    pub fn setPage(self: *volatile PdptEntry_1GB, page: u64) void {
         self.page = @truncate(page >> 30);
     }
 };
@@ -98,10 +98,10 @@ pub const PdptEntry_PD = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_page_directory(self: PdptEntry_PD) u64 {
+    pub fn getPageDirectory(self: PdptEntry_PD) u64 {
         return @as(u64, self.page_directory) << 12;
     }
-    pub fn set_page_directory(self: *volatile PdptEntry_PD, page_directory: u64) void {
+    pub fn setPageDirectory(self: *volatile PdptEntry_PD, page_directory: u64) void {
         self.page_directory = @truncate(page_directory >> 12);
     }
 };
@@ -110,7 +110,7 @@ pub const PdptEntry_PD = packed struct {
 pub const PdptEntry = packed union {
     huge_page: PdptEntry_1GB,
     page_directory: PdptEntry_PD,
-    pub fn is_huge_page(self: PdptEntry) bool {
+    pub fn isHugePage(self: PdptEntry) bool {
         return self.huge_page.page_size;
     }
 };
@@ -151,7 +151,7 @@ pub const PdEntry_2MB = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PdEntry_2MB, page: u64) void {
+    pub fn setPage(self: *volatile PdEntry_2MB, page: u64) void {
         self.page = @truncate(page >> 21);
     }
 };
@@ -182,10 +182,10 @@ pub const PdEntry_PT = packed struct {
     /// Ignored
     _5: u11 = 0,
     execute_disable: bool,
-    pub fn get_page_table(self: PdEntry_PT) u64 {
+    pub fn getPageTable(self: PdEntry_PT) u64 {
         return @as(u64, self.page_table) << 12;
     }
-    pub fn set_page_table(self: *volatile PdEntry_PT, page_table: u64) void {
+    pub fn setPageTable(self: *volatile PdEntry_PT, page_table: u64) void {
         self.page_table = @truncate(page_table >> 12);
     }
 };
@@ -193,7 +193,7 @@ pub const PdEntry_PT = packed struct {
 pub const PdEntry = packed union {
     huge_page: PdEntry_2MB,
     page_table: PdEntry_PT,
-    pub fn is_huge_page(self: PdEntry) bool {
+    pub fn isHugePage(self: PdEntry) bool {
         return self.huge_page.page_size;
     }
 };
@@ -230,7 +230,7 @@ pub const PtEntry = packed struct {
     /// Used for protection keys
     _5: u4 = 0,
     execute_disable: bool,
-    pub fn set_page(self: *volatile PtEntry, physical_address: u64) void {
+    pub fn setPage(self: *volatile PtEntry, physical_address: u64) void {
         self.page = @truncate(physical_address >> 12);
     }
 };

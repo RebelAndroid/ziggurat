@@ -1,12 +1,12 @@
 const std = @import("std");
 const gdt = @import("gdt.zig");
 
-pub extern fn read_msr(msr: u32) callconv(.C) u64;
+pub extern fn readMsr(msr: u32) callconv(.C) u64;
 comptime {
     asm (
-        \\.globl read_msr
-        \\.type read_msr @function
-        \\read_msr:
+        \\.globl readMsr
+        \\.type readMsr @function
+        \\readMsr:
         \\  movl %edi, %ecx
         \\  rdmsr
         \\  shlq $32, %rdx
@@ -15,12 +15,12 @@ comptime {
     );
 }
 
-pub extern fn write_msr(msr: u32, value: u64) callconv(.C) void;
+pub extern fn writeMsr(msr: u32, value: u64) callconv(.C) void;
 comptime {
     asm (
-        \\.globl write_msr
-        \\.type write_msr @function
-        \\write_msr:
+        \\.globl writeMsr
+        \\.type writeMsr @function
+        \\writeMsr:
         \\  movl %edi, %ecx
         \\  movq %rsi, %rax
         \\  movq %rsi, %rdx
@@ -44,12 +44,12 @@ pub const Efer = packed struct {
     _3: u48,
 };
 
-pub fn read_efer() Efer {
-    return @bitCast(read_msr(0xC0000080));
+pub fn readEfer() Efer {
+    return @bitCast(readMsr(0xC0000080));
 }
 
-pub fn write_efer(efer: Efer) void {
-    write_msr(0xC0000080, @bitCast(efer));
+pub fn writeEfer(efer: Efer) void {
+    writeMsr(0xC0000080, @bitCast(efer));
 }
 
 pub const Star = packed struct {
@@ -58,32 +58,32 @@ pub const Star = packed struct {
     user_cs_selector: gdt.SegmentSelector,
 };
 
-pub fn read_star() Star {
-    return @bitCast(read_msr(0xC0000081));
+pub fn readStar() Star {
+    return @bitCast(readMsr(0xC0000081));
 }
 
-pub fn write_star(star: Star) void {
-    write_msr(0xC0000081, @bitCast(star));
-}
-
-/// IA32_LSTAR is the target of syscall
-pub fn read_lstar() u64 {
-    return @bitCast(read_msr(0xC0000082));
+pub fn writeStar(star: Star) void {
+    writeMsr(0xC0000081, @bitCast(star));
 }
 
 /// IA32_LSTAR is the target of syscall
-pub fn write_lstar(lstar: u64) void {
-    write_msr(0xC0000081, @bitCast(lstar));
+pub fn readLstar() u64 {
+    return @bitCast(readMsr(0xC0000082));
+}
+
+/// IA32_LSTAR is the target of syscall
+pub fn writeLstar(lstar: u64) void {
+    writeMsr(0xC0000081, @bitCast(lstar));
 }
 
 /// IA32_FMASK controls rflags
-pub fn read_fmask() u64 {
-    return @bitCast(read_msr(0xC0000084));
+pub fn readFmask() u64 {
+    return @bitCast(readMsr(0xC0000084));
 }
 
 /// IA32_FMASK controls rflags
-pub fn write_fmask(fmask: u64) u64 {
-    write_msr(0xC0000084, @bitCast(fmask));
+pub fn writeFmask(fmask: u64) u64 {
+    writeMsr(0xC0000084, @bitCast(fmask));
 }
 
 test "msr sizes" {

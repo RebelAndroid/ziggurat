@@ -96,16 +96,16 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     idt.loadIdt();
 
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
-    var efer: msr.Efer = msr.read_efer();
+    var efer: msr.Efer = msr.readEfer();
     efer.system_call_extensions = true;
-    msr.write_efer(efer);
+    msr.writeEfer(efer);
 
-    msr.write_star(msr.Star{
+    msr.writeStar(msr.Star{
         .kernel_cs_selector = gdt.kernel_code_segment_selector,
         .user_cs_selector = gdt.user_code_segment_selector,
     });
 
-    elf.load_elf(&init_file);
+    elf.loadElf(&init_file);
 
     main_log.info("done\n", .{});
     done();
