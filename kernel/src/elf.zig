@@ -15,7 +15,7 @@ pub const Header = extern struct {
     typ: u16,
     instruction_set: u16,
     elf_version: u32,
-    entry_point_offset: u64,
+    entry_point: u64,
     program_header_table_offset: u64,
     section_header_table_offset: u64,
     flags: u32,
@@ -66,11 +66,15 @@ pub const ProgramHeaderFlags = packed struct {
 };
 
 pub const SectionHeader = extern struct {
+    /// The name of this section as an offset into the string table
     name: u32,
     typ: SectionHeaderType,
     flags: SectionHeaderFlags,
+    /// The location where the section should be place in memory, or zero if the section is not to be placed in memory
     address: u64,
+    /// The position of the section in the file
     offset: u64,
+    /// The size of the section. If the type is not nobits, the section occupies this much space in the file.
     size: u64,
     link: u32,
     info: u32,
@@ -134,20 +138,34 @@ pub fn loadElf(file: []align(8) const u8) void {
     }
     const ptr: [*]const ProgramHeader = @alignCast(@ptrCast(&file[header.program_header_table_offset]));
     const program_header_table = ptr[0..header.program_header_table_size];
-    for (program_header_table) |pheader| {
-        log.info("program header: {}\n", .{pheader});
-    }
 
     const ptr2: [*]const SectionHeader = @alignCast(@ptrCast(&file[header.section_header_table_offset]));
     const section_header_table = ptr2[0..header.section_header_table_size];
-    for (section_header_table) |sheader| {
-        log.info("section header: {}\n", .{sheader});
-    }
+
     if (section_header_table[0].size != 0 or section_header_table[0].link != 0) {
         // If these fields are non-zero they hold the actual number of section header entries and index of the string table section
         log.err("TODO", .{});
         return;
     }
+
+    const str_table_header = section_header_table[header.section_index_to_section_header_string_table];
+    const strs = file[str_table_header.offset..(str_table_header.offset + str_table_header.size)];
+
+    for (section_header_table) |sheader| {
+        const name: [*:0]const u8 = @ptrCast(strs[sheader.name..]);
+        log.info("section: {s}\n", .{name});
+    }
+
+    for (program_header_table) |pheader| {
+        log.info("program header address: 0x{x} align: {} size: 0x{x} flags {} type: {}\n", .{
+            pheader.virtual_address,
+            pheader.alignment,
+            pheader.memory_size,
+            pheader.flags,
+            pheader.typ,
+        });
+    }
+    log.info("entry point offset: 0x{x}\n", .{header.entry_point});
 }
 
 test "elf sizes" {

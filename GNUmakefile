@@ -60,7 +60,7 @@ kernel: init
 
 .PHONY: init
 init:
-	cd init && zig build -Doptimize=ReleaseSmall
+	cd init && zig build -Doptimize=ReleaseSafe
 	cp init/zig-out/bin/init kernel/src
 
 $(IMAGE_NAME).iso: limine/limine kernel
