@@ -171,124 +171,6 @@
 
 /******************************************************************************
  *
- * Configuration for ACPI tools and utilities
- *
- *****************************************************************************/
-
-/* Common application configuration. All single threaded except for AcpiExec. */
-
-#if (defined ACPI_ASL_COMPILER) || \
-    (defined ACPI_BIN_APP)      || \
-    (defined ACPI_DUMP_APP)     || \
-    (defined ACPI_HELP_APP)     || \
-    (defined ACPI_NAMES_APP)    || \
-    (defined ACPI_SRC_APP)      || \
-    (defined ACPI_XTRACT_APP)   || \
-    (defined ACPI_EXAMPLE_APP)  || \
-    (defined ACPI_EFI_HELLO)
-#define ACPI_APPLICATION
-#define ACPI_SINGLE_THREADED
-#define USE_NATIVE_ALLOCATE_ZEROED
-#endif
-
-/* iASL configuration */
-
-#ifdef ACPI_ASL_COMPILER
-#define ACPI_DEBUG_OUTPUT
-#define ACPI_CONSTANT_EVAL_ONLY
-#define ACPI_LARGE_NAMESPACE_NODE
-#define ACPI_DATA_TABLE_DISASSEMBLY
-#define ACPI_32BIT_PHYSICAL_ADDRESS
-#define ACPI_DISASSEMBLER 1
-#endif
-
-/* AcpiExec configuration. Multithreaded with full AML debugger */
-
-#ifdef ACPI_EXEC_APP
-#define ACPI_APPLICATION
-#define ACPI_FULL_DEBUG
-#define ACPI_MUTEX_DEBUG
-#define ACPI_DBG_TRACK_ALLOCATIONS
-#endif
-
-/* AcpiHelp configuration. Error messages disabled. */
-
-#ifdef ACPI_HELP_APP
-#define ACPI_NO_ERROR_MESSAGES
-#endif
-
-/* AcpiNames configuration. Debug output enabled. */
-
-#ifdef ACPI_NAMES_APP
-#define ACPI_DEBUG_OUTPUT
-#endif
-
-/* AcpiExec/AcpiNames/Example configuration. Native RSDP used. */
-
-#if (defined ACPI_EXEC_APP)     || \
-    (defined ACPI_EXAMPLE_APP)  || \
-    (defined ACPI_NAMES_APP)
-#define ACPI_USE_NATIVE_RSDP_POINTER
-#endif
-
-/* AcpiDump configuration. Native mapping used if provided by the host */
-
-#ifdef ACPI_DUMP_APP
-#define ACPI_USE_NATIVE_MEMORY_MAPPING
-#endif
-
-/* AcpiNames/Example configuration. Hardware disabled */
-
-#if (defined ACPI_EXAMPLE_APP)  || \
-    (defined ACPI_NAMES_APP)
-#define ACPI_REDUCED_HARDWARE 1
-#endif
-
-/* Linkable ACPICA library. Two versions, one with full debug. */
-
-#ifdef ACPI_LIBRARY
-#define ACPI_USE_LOCAL_CACHE
-#define ACPI_DEBUGGER 1
-#define ACPI_DISASSEMBLER 1
-
-#ifdef _DEBUG
-#define ACPI_DEBUG_OUTPUT
-#endif
-#endif
-
-/* Common for all ACPICA applications */
-
-#ifdef ACPI_APPLICATION
-#define ACPI_USE_LOCAL_CACHE
-#endif
-
-/* Common debug/disassembler support */
-
-#ifdef ACPI_FULL_DEBUG
-#define ACPI_DEBUG_OUTPUT
-#define ACPI_DEBUGGER 1
-#define ACPI_DISASSEMBLER 1
-#endif
-
-/*
- * acpisrc CR\LF support
- * Unix file line endings do not include the carriage return.
- * If the acpisrc utility is being built using a microsoft compiler, it means
- * that it will be running on a windows machine which means that the output is
- * expected to have CR/LF newlines. If the acpisrc utility is built with
- * anything else, it will likely run on a system with LF newlines. This flag
- * tells the acpisrc utility that newlines will be in the LF format.
- */
-#if defined(ACPI_SRC_APP) && !defined(_MSC_VER)
-#define ACPI_SRC_OS_LF_ONLY 1
-#else
-#define ACPI_SRC_OS_LF_ONLY 0
-#endif
-
-/*! [Begin] no source code translation */
-
-/******************************************************************************
- *
  * Host configuration files. The compiler configuration files are included
  * first.
  *
@@ -305,77 +187,12 @@
 
 #endif
 
-#if defined(_LINUX) || defined(__linux__)
-#include "aclinux.h"
-
-#elif defined(_APPLE) || defined(__APPLE__)
-#include "acmacosx.h"
-
-#elif defined(__DragonFly__)
-#include "acdragonfly.h"
-
-#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
-#include "acfreebsd.h"
-
-#elif defined(__NetBSD__)
-#include "acnetbsd.h"
-
-#elif defined(__sun)
-#include "acsolaris.h"
-
-#elif defined(MODESTO)
-#include "acmodesto.h"
-
-#elif defined(NETWARE)
-#include "acnetware.h"
-
-#elif defined(_CYGWIN)
-#include "accygwin.h"
-
-#elif defined(WIN32)
-#include "acwin.h"
-
-#elif defined(WIN64)
-#include "acwin64.h"
-
-#elif defined(_WRS_LIB_BUILD)
-#include "acvxworks.h"
-
-#elif defined(__OS2__)
-#include "acos2.h"
-
-#elif defined(__HAIKU__)
-#include "achaiku.h"
-
-#elif defined(__QNX__)
-#include "acqnx.h"
-
-/*
- * EFI applications can be built with -nostdlib, in this case, it must be
- * included after including all other host environmental definitions, in
- * order to override the definitions.
- */
-#elif defined(_AED_EFI) || defined(_GNU_EFI) || defined(_EDK2_EFI)
-#include "acefi.h"
-
-#elif defined(__ZEPHYR__)
-#include "aczephyr.h"
-#else
-
-/* Unknown environment */
+/* Ziggurat configuration */
 
 #include "acziggurat.h"
-#endif
-
-/*! [End] no source code translation !*/
-
-
-/******************************************************************************
- *
- * Setup defaults for the required symbols that were not defined in one of
- * the host/compiler files above.
- *
- *****************************************************************************/
+#define ACPI_DEBUG_OUTPUT
+#define ACPI_DEBUGGER 1
+#define ACPI_DISASSEMBLER 1
 
 /* 64-bit data types */
 
@@ -412,7 +229,7 @@
 /* "inline" keywords - configurable since inline is not standardized */
 
 #ifndef ACPI_INLINE
-#define ACPI_INLINE
+#define ACPI_INLINE inline
 #endif
 
 /* Use ordered initialization if compiler doesn't support designated. */

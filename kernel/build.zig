@@ -1,7 +1,7 @@
 const std = @import("std");
 const build_font = @import("build-font.zig");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     // Define a freestanding x86_64 cross-compilation target.
     var target: std.zig.CrossTarget = .{
         .cpu_arch = .x86_64,
@@ -31,6 +31,20 @@ pub fn build(b: *std.Build) void {
         .code_model = .kernel,
         .pic = true,
     });
+
+    // Add ACPICA.
+    const components = [_][]const u8{ "dispatcher", "events", "executer", "hardware", "parser", "namespace", "utilities", "tables", "resources" };
+    inline for (components) |component| {
+        const c_src_dir = "../acpica-unix-20240321/source/components/" ++ component;
+        const dir = try std.fs.cwd().openDir(c_src_dir, .{ .iterate = true });
+        var it = dir.iterate();
+        while (try it.next()) |entry| {
+            if (std.mem.endsWith(u8, entry.name, ".c")) {
+                kernel.addCSourceFile(.{ .file = b.path(b.pathJoin(&[_][]const u8{ c_src_dir, entry.name })) });
+            }
+        }
+    }
+    kernel.addIncludePath(b.path("../acpica-unix-20240321/source/include"));
 
     kernel.root_module.addImport("limine", limine.module("limine"));
     kernel.setLinkerScriptPath(std.Build.LazyPath{ .src_path = .{ .owner = b, .sub_path = "linker.ld" } });
