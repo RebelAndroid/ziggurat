@@ -20,6 +20,7 @@ pub export var framebuffer_request: limine.FramebufferRequest = .{};
 pub export var hhdm_request: limine.HhdmRequest = .{};
 pub export var memory_map_request: limine.MemoryMapRequest = .{};
 pub export var rsdp_request: limine.RsdpRequest = .{};
+pub export var stack_size_request: limine.StackSizeRequest = .{ .stack_size = 4096 * 16 };
 
 pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
@@ -105,15 +106,20 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         .user_cs_selector = gdt.user_code_segment_selector,
     });
 
-    elf.loadElf(&init_file);
-
     const cr3 = reg.get_cr3();
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     log.info("new cr3: {}\n", .{new_cr3});
     reg.set_cr3(@bitCast(new_cr3));
 
+    new_cr3.map(paging.Page{ .four_kb = @bitCast(@as(u64, 0x100000)) }, frame_allocator.allocate_frame(), hhdm_offset, &frame_allocator, reg.PageFlags{ .user = false, .execute = true, .write = true }) catch unreachable;
+    const p = new_cr3.translate(@bitCast(@as(u64, 0x100000)), hhdm_offset);
+    log.info("p: {}\n", .{p});
+    // const test_ptr: *const u8 = @ptrFromInt(0x100000);
+    // log.info("ptr: {}", .{test_ptr.*});
+
+    // elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+
     log.info("done\n", .{});
-    log.info("gdt: {}", .{gdt.kernel_code_segment_selector});
     done();
 }
 

@@ -1,4 +1,6 @@
 const std = @import("std");
+const registers = @import("x64/registers.zig");
+const pmm = @import("pmm.zig");
 
 const log = std.log.scoped(.elf);
 
@@ -121,7 +123,7 @@ pub const SectionHeaderFlags = packed struct {
     _2: u32,
 };
 
-pub fn loadElf(file: []align(8) const u8) void {
+pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) void {
     const header: *const Header = @ptrCast(file);
     log.info("ELF header: {}\n", .{header});
     if (header.magic[0] != 0x7f or header.magic[1] != 'E' or header.magic[2] != 'L' or header.magic[3] != 'F') {
@@ -157,13 +159,27 @@ pub fn loadElf(file: []align(8) const u8) void {
     }
 
     for (program_header_table) |pheader| {
-        log.info("program header address: 0x{x} align: {} size: 0x{x} flags {} type: {}\n", .{
+        log.info("program header address: 0x{x} align: {} size: 0x{x} flags {} type: {} offset: 0x{x}\n", .{
             pheader.virtual_address,
             pheader.alignment,
             pheader.memory_size,
             pheader.flags,
             pheader.typ,
+            pheader.offset,
         });
+        if (pheader.typ == ProgramHeaderType.load) {
+            const end = pheader.virtual_address + pheader.memory_size - 1;
+            const end_page = end & (~@as(u64, 0xFFF));
+            const start_page = pheader.virtual_address & (~@as(u64, 0xFFF));
+            const page_count = (end_page - start_page) / 4096 + 1;
+            cr3.allocateRange(start_page, page_count * 4096, hhdm_offset, frame_allocator, registers.PageFlags{
+                .user = true,
+                .write = true,
+                .execute = true,
+            });
+            const test_ptr: *const u8 = @ptrFromInt(0x1000000);
+            log.info("ptr: {}", .{test_ptr.*});
+        }
     }
     log.info("entry point offset: 0x{x}\n", .{header.entry_point});
 }

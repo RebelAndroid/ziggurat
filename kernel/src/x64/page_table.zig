@@ -1,7 +1,7 @@
 const std = @import("std");
 const pmm = @import("../pmm.zig");
 
-const MapError = error{
+pub const MapError = error{
     /// Indicates that a virtual address has already been mapped
     AlreadyPresent,
     Unaligned,

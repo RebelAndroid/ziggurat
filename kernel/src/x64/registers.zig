@@ -55,6 +55,17 @@ pub const CR3 = packed struct {
         }
     }
 
+    extern fn invalidatePage(address: u64) callconv(.C) void;
+    comptime {
+        asm (
+            \\.globl invalidatePage
+            \\.type invalidatePage @function
+            \\invalidatePage:
+            \\  invlpg (%rdi)
+            \\  retq
+        );
+    }
+
     pub fn map(self: CR3, page: page_table.Page, physical_address: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator, flags: PageFlags) page_table.MapError!void {
         const addr = switch (page) {
             .four_kb => |virt| virt,
@@ -190,7 +201,18 @@ pub const CR3 = packed struct {
             .execute_disable = !flags.execute,
         };
         pte.setPage(physical_address);
+        invalidatePage(@bitCast(page.getAddress()));
         return;
+    }
+
+    pub fn allocateRange(self: CR3, start: u64, size: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator, flags: PageFlags) void {
+        std.debug.assert(start % 4096 == 0);
+        const page_count = @divExact(size, 4096);
+        var i: u64 = 0;
+        while (i < page_count) : (i += 1) {
+            const frame = frame_allocator.allocate_frame();
+            self.map(page_table.Page{ .four_kb = @bitCast(@as(u64, start + 4096 * i)) }, frame, hhdm_offset, frame_allocator, flags) catch unreachable;
+        }
     }
 
     pub fn copy(self: CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) CR3 {
