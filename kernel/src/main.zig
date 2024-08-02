@@ -30,7 +30,7 @@ pub const std_options = .{
     .logFn = serial_log.serial_log,
 };
 
-const main_log = std.log.scoped(.main);
+const log = std.log.scoped(.main);
 
 inline fn done() noreturn {
     while (true) {
@@ -43,7 +43,7 @@ inline fn breakpoint() void {
 }
 
 pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
-    main_log.err("panic: {s}\n", .{message});
+    log.err("panic: {s}\n", .{message});
     done();
 }
 
@@ -58,7 +58,7 @@ export fn _start() callconv(.C) noreturn {
     // Ensure we got a framebuffer.
     if (framebuffer_request.response) |framebuffer_response| {
         if (framebuffer_response.framebuffer_count < 1) {
-            main_log.err("frame buffer response had no framebuffers", .{});
+            log.err("frame buffer response had no framebuffers", .{});
             done();
         }
 
@@ -107,7 +107,13 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     elf.loadElf(&init_file);
 
-    main_log.info("done\n", .{});
+    const cr3 = reg.get_cr3();
+    const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
+    log.info("new cr3: {}\n", .{new_cr3});
+    reg.set_cr3(@bitCast(new_cr3));
+
+    log.info("done\n", .{});
+    log.info("gdt: {}", .{gdt.kernel_code_segment_selector});
     done();
 }
 

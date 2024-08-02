@@ -1,12 +1,19 @@
 const page_table = @import("page_table.zig");
 const pmm = @import("../pmm.zig");
 const log = @import("std").log.scoped(.registers);
+const std = @import("std");
+
+pub const PageFlags = struct {
+    write: bool,
+    execute: bool,
+    user: bool,
+};
 
 pub const CR3 = packed struct {
-    _1: u3,
+    _1: u3 = 0,
     pwt: u1,
     pcd: u1,
-    _2: u7,
+    _2: u7 = 0,
     pml4: u52,
     pub fn get_pml4(self: CR3) u64 {
         return @as(u64, self.pml4) << 12;
@@ -48,15 +55,7 @@ pub const CR3 = packed struct {
         }
     }
 
-    const MapError = error{
-        /// Indicates that a virtual address has already been mapped
-        AlreadyPresent,
-        Unaligned,
-        NoMemory,
-    };
-
-    pub fn map(self: CR3, page: page_table.Page, physical_address: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) MapError!void {
-        log.info("inside map\n", .{});
+    pub fn map(self: CR3, page: page_table.Page, physical_address: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator, flags: PageFlags) page_table.MapError!void {
         const addr = switch (page) {
             .four_kb => |virt| virt,
             .two_mb => |virt| virt,
@@ -74,9 +73,8 @@ pub const CR3 = packed struct {
             // allocate frame for new pdpt, this is zeroed by the allocator so it contains no valid entries
             const frame = frame_allocator.allocate_frame();
             if (frame == 0) {
-                return MapError.NoMemory;
+                return page_table.MapError.NoMemory;
             }
-            log.debug("allocating new PDPT at frame: 0x{}", .{frame});
             pml4e = page_table.PML4Entry{
                 .present = true,
                 .read_write = true,
@@ -88,25 +86,25 @@ pub const CR3 = packed struct {
             };
             pml4e.setPdpt(frame);
         }
-        // we now have a valid pml4e
-        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.getPdpt()});
+
+        std.debug.assert(pml4e.present);
+
         const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         var pdpte: *volatile page_table.PdptEntry = &pdpt[addr.directory_pointer];
         if (page_type == page_table.PageType.one_gb) {
-            log.debug("mapping 1GB page", .{});
             if (pdpte.huge_page.present) {
-                return MapError.AlreadyPresent;
+                return page_table.MapError.AlreadyPresent;
             }
             pdpte.huge_page = page_table.PdptEntry_1GB{
                 .present = true,
-                .read_write = true,
-                .user_supervisor = false,
+                .read_write = flags.write,
+                .user_supervisor = flags.user,
                 .pwt = false,
                 .pcd = false,
-                .execute_disable = false,
+                .execute_disable = !flags.execute,
             };
             if (physical_address & 0x3FFFFFFF != 0) {
-                return MapError.Unaligned;
+                return page_table.MapError.Unaligned;
             }
             pdpte.huge_page.setPage(physical_address);
             return;
@@ -115,13 +113,12 @@ pub const CR3 = packed struct {
             // if we don't have a page directory to reference, we need to create a new one
             const frame = frame_allocator.allocate_frame();
             if (frame == 0) {
-                return MapError.NoMemory;
+                return page_table.MapError.NoMemory;
             }
-            log.debug("allocating new PDPT at frame: 0x{}", .{frame});
             pdpte.page_directory = page_table.PdptEntry_PD{
                 .present = true,
                 .read_write = true,
-                .user_supervisor = false,
+                .user_supervisor = true,
                 .pwt = false,
                 .pcd = false,
                 .accessed = false,
@@ -131,26 +128,25 @@ pub const CR3 = packed struct {
         }
         if (pdpte.isHugePage()) {
             // we are trying to map a smaller page that is part of an already mapped huge page
-            return MapError.AlreadyPresent;
+            return page_table.MapError.AlreadyPresent;
         }
-        // we now have a valid pdpte
-        log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.getPageDirectory()});
+
+        std.debug.assert(pdpte.huge_page.present);
+
         const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
         var pde: *volatile page_table.PdEntry = &pd[addr.directory];
-        log.debug("pde: {}\n", .{pde.page_table});
         if (page_type == page_table.PageType.two_mb) {
-            log.debug("mapping 2MB page", .{});
             if (pde.huge_page.present) {
-                return MapError.AlreadyPresent;
+                return page_table.MapError.AlreadyPresent;
             }
             pde.huge_page = page_table.PdEntry_2MB{
                 .present = true,
-                .read_write = true,
-                .user_supervisor = false,
+                .read_write = flags.write,
+                .user_supervisor = flags.user,
                 .pwt = false,
                 .pcd = false,
                 .accessed = false,
-                .execute_disable = false,
+                .execute_disable = !flags.execute,
             };
             pde.huge_page.setPage(physical_address);
             return;
@@ -159,9 +155,8 @@ pub const CR3 = packed struct {
             // if we don't have a page table to reference, we need to create a new one
             const frame = frame_allocator.allocate_frame();
             if (frame == 0) {
-                return MapError.NoMemory;
+                return page_table.MapError.NoMemory;
             }
-            log.debug("allocating new PT at frame: 0x{}", .{frame});
             pde.page_table = page_table.PdEntry_PT{
                 .present = true,
                 .read_write = true,
@@ -175,26 +170,37 @@ pub const CR3 = packed struct {
         }
         if (pde.isHugePage()) {
             // we are trying to map a smaller page that is part of an already mapped huge page
-            return MapError.AlreadyPresent;
+            return page_table.MapError.AlreadyPresent;
         }
-        // we now have a valid pde, additionally, we are mapping a 4kb page
-        log.debug("using page table at: 0x{X}\n", .{pde.page_table.getPageTable()});
+        std.debug.assert(pde.huge_page.present);
+        std.debug.assert(page_type == page_table.PageType.four_kb);
+
         const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
         var pte: *volatile page_table.PtEntry = &pt[addr.table];
         if (pte.present) {
-            return MapError.AlreadyPresent;
+            return page_table.MapError.AlreadyPresent;
         }
         pte.* = page_table.PtEntry{
             .present = true,
-            .read_write = true,
-            .user_supervisor = false,
+            .read_write = flags.write,
+            .user_supervisor = flags.user,
             .pwt = false,
             .pcd = false,
             .accessed = false,
-            .execute_disable = false,
+            .execute_disable = !flags.execute,
         };
         pte.setPage(physical_address);
         return;
+    }
+
+    pub fn copy(self: CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) CR3 {
+        const pml4: *const page_table.PML4 = @ptrFromInt(hhdm_offset + self.get_pml4());
+        const new_pml4 = page_table.copyPml4(pml4, hhdm_offset, frame_allocator);
+        return CR3{
+            .pwt = 0,
+            .pcd = 0,
+            .pml4 = @intCast(new_pml4 >> 12),
+        };
     }
 };
 

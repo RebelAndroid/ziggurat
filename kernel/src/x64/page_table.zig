@@ -1,4 +1,12 @@
 const std = @import("std");
+const pmm = @import("../pmm.zig");
+
+const MapError = error{
+    /// Indicates that a virtual address has already been mapped
+    AlreadyPresent,
+    Unaligned,
+    NoMemory,
+};
 
 pub const PML4Entry = packed struct {
     present: bool,
@@ -247,12 +255,110 @@ pub const VirtualAddress = packed struct {
     sign_extension: u16,
 };
 
+pub const PageType = enum {
+    four_kb,
+    two_mb,
+    one_gb,
+};
+
 /// A page of any size.
-pub const Page = union(enum) {
+pub const Page = union(PageType) {
     four_kb: VirtualAddress,
     two_mb: VirtualAddress,
     one_gb: VirtualAddress,
+    pub fn getAddress(self: Page) VirtualAddress {
+        return switch (self) {
+            .four_kb => |virt| virt,
+            .two_mb => |virt| virt,
+            .one_gb => |virt| virt,
+        };
+    }
+    pub fn getType(self: Page) PageType {
+        return switch (self) {
+            .four_kb => |_| PageType.four_kb,
+            .two_mb => |_| PageType.two_mb,
+            .one_gb => |_| PageType.one_gb,
+        };
+    }
 };
+
+pub fn copyPml4(pml4: *const PML4, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
+    const frame = frame_allocator.allocate_frame();
+    var new_pml4: *PML4 = @ptrFromInt(hhdm_offset + frame);
+
+    var i: u64 = 0;
+    for (pml4) |pml4e| {
+        if (pml4e.present) {
+            const pdpt: *Pdpt = @ptrFromInt(hhdm_offset + pml4e.getPdpt());
+            const new_pdpt = copyPdpt(pdpt, hhdm_offset, frame_allocator);
+            // copy the old entry, and make it point to the new pdpt
+            new_pml4[i] = pml4[i];
+            new_pml4[i].setPdpt(new_pdpt);
+        }
+        i += 1;
+    }
+    return frame;
+}
+
+pub fn copyPdpt(pdpt: *const Pdpt, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
+    const frame = frame_allocator.allocate_frame();
+    const new_pdpt: *Pdpt = @ptrFromInt(hhdm_offset + frame);
+
+    var i: u64 = 0;
+    for (pdpt) |pdpte| {
+        if (pdpte.huge_page.present) {
+            if (pdpte.isHugePage()) {
+                // copy huge page
+                new_pdpt[i] = pdpte;
+            } else {
+                // copy page directory
+                const pd: *Pd = @ptrFromInt(hhdm_offset + pdpte.page_directory.getPageDirectory());
+                const new_pd = copyPd(pd, hhdm_offset, frame_allocator);
+                new_pdpt[i] = pdpt[i];
+                new_pdpt[i].page_directory.setPageDirectory(new_pd);
+            }
+        }
+        i += 1;
+    }
+    return frame;
+}
+
+pub fn copyPd(pd: *const Pd, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
+    const frame = frame_allocator.allocate_frame();
+    const new_pd: *Pd = @ptrFromInt(hhdm_offset + frame);
+
+    var i: u64 = 0;
+    for (pd) |pde| {
+        if (pde.huge_page.present) {
+            if (pde.isHugePage()) {
+                // copy huge page
+                new_pd[i] = pde;
+            } else {
+                // copy page table
+                const page_table: *Pt = @ptrFromInt(hhdm_offset + pde.page_table.getPageTable());
+                const new_page_table = copyPageTable(page_table, hhdm_offset, frame_allocator);
+                new_pd[i] = pd[i];
+                new_pd[i].page_table.setPageTable(new_page_table);
+            }
+        }
+        i += 1;
+    }
+    return frame;
+}
+
+pub fn copyPageTable(page_table: *const Pt, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
+    const frame = frame_allocator.allocate_frame();
+    const new_pt: *Pt = @ptrFromInt(hhdm_offset + frame);
+
+    var i: u64 = 0;
+    for (page_table) |pte| {
+        if (pte.present) {
+            new_pt[i] = pte;
+        }
+        i += 1;
+    }
+    return frame;
+}
 
 test "Paging Structure Sizes" {
     // Sizes of entries
