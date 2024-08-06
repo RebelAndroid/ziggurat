@@ -107,15 +107,20 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     });
 
     const cr3 = reg.get_cr3();
+    log.info("old cr3: {}\n", .{cr3});
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     log.info("new cr3: {}\n", .{new_cr3});
     reg.set_cr3(@bitCast(new_cr3));
 
-    new_cr3.map(paging.Page{ .four_kb = @bitCast(@as(u64, 0x100000)) }, frame_allocator.allocate_frame(), hhdm_offset, &frame_allocator, reg.PageFlags{ .user = false, .execute = true, .write = true }) catch unreachable;
-    const p = new_cr3.translate(@bitCast(@as(u64, 0x100000)), hhdm_offset);
-    log.info("p: {}\n", .{p});
-    // const test_ptr: *const u8 = @ptrFromInt(0x100000);
-    // log.info("ptr: {}", .{test_ptr.*});
+    const phys = frame_allocator.allocate_frame();
+    new_cr3.map(paging.Page{ .four_kb = @bitCast(@as(u64, 0x100000)) }, phys, hhdm_offset, &frame_allocator, reg.PageFlags{ .user = false, .execute = true, .write = true }) catch unreachable;
+    const phys2 = new_cr3.translate(@bitCast(@as(u64, 0x100000)), hhdm_offset);
+    log.info("expected: 0x{x}\n", .{phys});
+    log.info("actual: 0x{x}\n", .{phys2});
+    const test_ptr: *u8 = @ptrFromInt(0x100000);
+    test_ptr.* = 47;
+    const test_ptr2: *u8 = @ptrFromInt(hhdm_offset + phys);
+    log.info("test: {}\n", .{test_ptr2.*});
 
     // elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 

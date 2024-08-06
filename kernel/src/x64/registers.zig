@@ -25,7 +25,7 @@ pub const CR3 = packed struct {
             return 1;
         }
 
-        log.debug("using page directory pointer table at: 0x{X}\n", .{pml4e.getPdpt()});
+        log.info("using page directory pointer table at: 0x{x}\n", .{pml4e.getPdpt()});
         const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         const pdpte = pdpt[addr.directory_pointer];
         if (!pdpte.huge_page.present) {
@@ -35,7 +35,7 @@ pub const CR3 = packed struct {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
             return (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
         } else {
-            log.debug("using page directory at: 0x{X}\n", .{pdpte.page_directory.getPageDirectory()});
+            log.info("using page directory at: 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
             const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
             const pde = pd[addr.directory];
             if (!pde.huge_page.present) {
@@ -44,7 +44,7 @@ pub const CR3 = packed struct {
             if (pde.isHugePage()) {
                 return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
             } else {
-                log.debug("using page table at: 0x{X}\n", .{pde.page_table.getPageTable()});
+                log.info("using page table at: 0x{x}\n", .{pde.page_table.getPageTable()});
                 const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
                 const pte = pt[addr.table];
                 if (!pte.present) {
@@ -78,7 +78,7 @@ pub const CR3 = packed struct {
             .one_gb => page_table.PageType.one_gb,
         };
         const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
-        var pml4e = pml4[addr.pml4];
+        var pml4e: *volatile page_table.PML4Entry = &pml4[addr.pml4];
         if (!pml4e.present) {
             // we need to create a new pml4e pointing to a new pdpt
             // allocate frame for new pdpt, this is zeroed by the allocator so it contains no valid entries
@@ -86,7 +86,7 @@ pub const CR3 = packed struct {
             if (frame == 0) {
                 return page_table.MapError.NoMemory;
             }
-            pml4e = page_table.PML4Entry{
+            pml4e.* = page_table.PML4Entry{
                 .present = true,
                 .read_write = true,
                 .user_supervisor = false,
@@ -100,6 +100,7 @@ pub const CR3 = packed struct {
 
         std.debug.assert(pml4e.present);
 
+        log.info("following pdpt at 0x{x}\n", .{pml4e.getPdpt()});
         const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         var pdpte: *volatile page_table.PdptEntry = &pdpt[addr.directory_pointer];
         if (page_type == page_table.PageType.one_gb) {
@@ -143,7 +144,7 @@ pub const CR3 = packed struct {
         }
 
         std.debug.assert(pdpte.huge_page.present);
-
+        log.info("following pd at 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
         const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
         var pde: *volatile page_table.PdEntry = &pd[addr.directory];
         if (page_type == page_table.PageType.two_mb) {
@@ -186,6 +187,7 @@ pub const CR3 = packed struct {
         std.debug.assert(pde.huge_page.present);
         std.debug.assert(page_type == page_table.PageType.four_kb);
 
+        log.info("following pt at 0x{x}\n", .{pde.page_table.getPageTable()});
         const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
         var pte: *volatile page_table.PtEntry = &pt[addr.table];
         if (pte.present) {
