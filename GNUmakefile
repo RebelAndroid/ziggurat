@@ -28,7 +28,7 @@ run: $(IMAGE_NAME).iso
 
 .PHONY: run-uefi
 run-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot -d int -s -S -no-shutdown
 
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd

@@ -123,7 +123,7 @@ pub const SectionHeaderFlags = packed struct {
     _2: u32,
 };
 
-pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) void {
+pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
     const header: *const Header = @ptrCast(file);
     log.info("ELF header: {}\n", .{header});
     if (header.magic[0] != 0x7f or header.magic[1] != 'E' or header.magic[2] != 'L' or header.magic[3] != 'F') {
@@ -147,7 +147,7 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
     if (section_header_table[0].size != 0 or section_header_table[0].link != 0) {
         // If these fields are non-zero they hold the actual number of section header entries and index of the string table section
         log.err("TODO", .{});
-        return;
+        return 0;
     }
 
     const str_table_header = section_header_table[header.section_index_to_section_header_string_table];
@@ -155,7 +155,7 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
 
     for (section_header_table) |sheader| {
         const name: [*:0]const u8 = @ptrCast(strs[sheader.name..]);
-        log.info("section: {s}\n", .{name});
+        log.debug("section: {s}\n", .{name});
     }
 
     for (program_header_table) |pheader| {
@@ -174,14 +174,13 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
             const page_count = (end_page - start_page) / 4096 + 1;
             cr3.allocateRange(start_page, page_count * 4096, hhdm_offset, frame_allocator, registers.PageFlags{
                 .user = true,
-                .write = true,
-                .execute = true,
+                .write = pheader.flags.writable,
+                .execute = pheader.flags.executable,
             });
-            const test_ptr: *const u8 = @ptrFromInt(0x1000000);
-            log.info("ptr: {}", .{test_ptr.*});
         }
     }
     log.info("entry point offset: 0x{x}\n", .{header.entry_point});
+    return header.entry_point;
 }
 
 test "elf sizes" {

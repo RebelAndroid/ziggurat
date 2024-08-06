@@ -108,6 +108,7 @@ fn setIdtEntries() void {
     IDT[8] = double_fault_entry;
     IDT[0xD] = genprot_entry;
     IDT[0xE] = page_fault_entry;
+    log.warn("page fault entry: 0x{x}\n", .{@intFromPtr(&page_fault_entry)});
 }
 
 pub fn loadIdt() void {

@@ -16,18 +16,18 @@ const elf = @import("elf.zig");
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent. In Zig, `export var` is what we use.
-pub export var framebuffer_request: limine.FramebufferRequest = .{};
-pub export var hhdm_request: limine.HhdmRequest = .{};
-pub export var memory_map_request: limine.MemoryMapRequest = .{};
-pub export var rsdp_request: limine.RsdpRequest = .{};
-pub export var stack_size_request: limine.StackSizeRequest = .{ .stack_size = 4096 * 16 };
+export var framebuffer_request: limine.FramebufferRequest = .{};
+export var hhdm_request: limine.HhdmRequest = .{};
+export var memory_map_request: limine.MemoryMapRequest = .{};
+export var rsdp_request: limine.RsdpRequest = .{};
+export var stack_size_request: limine.StackSizeRequest = .{ .stack_size = 4096 * 16 };
 
-pub export var base_revision: limine.BaseRevision = .{ .revision = 2 };
+export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
 const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
-    .log_level = .info,
+    .log_level = .debug,
     .logFn = serial_log.serial_log,
 };
 
@@ -92,37 +92,37 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
+    log.info("loading gdt\n", .{});
     gdt.loadGdt();
-
+    log.info("loading idt\n", .{});
     idt.loadIdt();
 
+    log.info("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
     var efer: msr.Efer = msr.readEfer();
     efer.system_call_extensions = true;
+    efer.no_execute_enable = true;
     msr.writeEfer(efer);
 
+    log.info("setting star\n", .{});
     msr.writeStar(msr.Star{
         .kernel_cs_selector = gdt.kernel_code_segment_selector,
         .user_cs_selector = gdt.user_code_segment_selector,
     });
 
+    msr.writeLstar(0x69420);
+
+    log.info("deep copying page tables\n", .{});
+    // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
     const cr3 = reg.get_cr3();
-    log.info("old cr3: {}\n", .{cr3});
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
-    log.info("new cr3: {}\n", .{new_cr3});
     reg.set_cr3(@bitCast(new_cr3));
 
-    const phys = frame_allocator.allocate_frame();
-    new_cr3.map(paging.Page{ .four_kb = @bitCast(@as(u64, 0x100000)) }, phys, hhdm_offset, &frame_allocator, reg.PageFlags{ .user = false, .execute = true, .write = true }) catch unreachable;
-    const phys2 = new_cr3.translate(@bitCast(@as(u64, 0x100000)), hhdm_offset);
-    log.info("expected: 0x{x}\n", .{phys});
-    log.info("actual: 0x{x}\n", .{phys2});
-    const test_ptr: *u8 = @ptrFromInt(0x100000);
-    test_ptr.* = 47;
-    const test_ptr2: *u8 = @ptrFromInt(hhdm_offset + phys);
-    log.info("test: {}\n", .{test_ptr2.*});
+    log.info("loading elf\n", .{});
+    const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
-    // elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+    log.info("jumping to user mode\n", .{});
+    jump_to_user_mode(entry_point, 0x202);
 
     acpi.apica_test();
     log.info("done\n", .{});
@@ -139,11 +139,4 @@ comptime {
         \\  movq %rsi, %r11
         \\  sysretq
     );
-}
-
-pub fn user_mode() noreturn {
-    // asm volatile ("int $3");
-    while (true) {
-        asm volatile ("hlt");
-    }
 }

@@ -10,8 +10,18 @@ const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .
 pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_name = @tagName(scope);
     const level_name = level.asText();
-    try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
-    try serial_writer.print(format, args);
+    const b = switch (scope) {
+        // remember that log levels are sorted backwards, ie the smallest int value is err
+        .registers => @intFromEnum(level) <= @intFromEnum(std.log.Level.info),
+        .main => @intFromEnum(level) <= @intFromEnum(std.log.Level.debug),
+        .elf => @intFromEnum(level) <= @intFromEnum(std.log.Level.info),
+        else => true,
+    };
+    // const b = true;
+    if (b) {
+        try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
+        try serial_writer.print(format, args);
+    }
 }
 
 fn serial_print(_: Context, text: []const u8) WriteError!usize {
