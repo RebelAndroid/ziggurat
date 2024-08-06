@@ -1145,8 +1145,8 @@ typedef struct acpi_object_list
 
 #ifdef ACPI_NO_MEM_ALLOCATIONS
 
-#define ACPI_ALLOCATE_BUFFER        (ACPI_SIZE) (0)
-#define ACPI_ALLOCATE_LOCAL_BUFFER  (ACPI_SIZE) (0)
+#define ACPI_ALLOCATE_BUFFER        (ACPI_SIZE) (-1)
+#define ACPI_ALLOCATE_LOCAL_BUFFER  (ACPI_SIZE) (-2)
 
 #else /* ACPI_NO_MEM_ALLOCATIONS */
 

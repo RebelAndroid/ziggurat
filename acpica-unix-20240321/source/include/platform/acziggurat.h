@@ -153,6 +153,10 @@
 #ifndef __ACZIGGURAT_H__
 #define __ACZIGGURAT_H__
 
+#include <stdint.h>
+#include <stddef.h>
+
+#define ACPI_DEBUG_OUTPUT
 /* Common (in-kernel/user-space) ACPICA configuration */
 
 // #define ACPI_USE_SYSTEM_CLIBRARY
@@ -174,8 +178,8 @@
 #ifndef CONFIG_ACPI
     /* External globals for __KERNEL__, stubs is needed */
 
-    #define ACPI_GLOBAL(t,a)
-    #define ACPI_INIT_GLOBAL(t,a,b)
+    // #define ACPI_GLOBAL(t,a)
+    // #define ACPI_INIT_GLOBAL(t,a,b)
 
     /* Generating stubs for configurable ACPICA macros */
 
@@ -188,16 +192,16 @@
 
     /* External interface for __KERNEL__, stub is needed */
 
-    #define ACPI_EXTERNAL_RETURN_STATUS(Prototype) \
-        static ACPI_INLINE Prototype {return(AE_NOT_CONFIGURED);}
-    #define ACPI_EXTERNAL_RETURN_OK(Prototype) \
-        static ACPI_INLINE Prototype {return(AE_OK);}
-    #define ACPI_EXTERNAL_RETURN_VOID(Prototype) \
-        static ACPI_INLINE Prototype {return;}
-    #define ACPI_EXTERNAL_RETURN_UINT32(Prototype) \
-        static ACPI_INLINE Prototype {return(0);}
-    #define ACPI_EXTERNAL_RETURN_PTR(Prototype) \
-        static ACPI_INLINE Prototype {return(NULL);}
+    // #define ACPI_EXTERNAL_RETURN_STATUS(Prototype) \
+    //     static ACPI_INLINE Prototype {return(AE_NOT_CONFIGURED);}
+    // #define ACPI_EXTERNAL_RETURN_OK(Prototype) \
+    //     static ACPI_INLINE Prototype {return(AE_OK);}
+    // #define ACPI_EXTERNAL_RETURN_VOID(Prototype) \
+    //     static ACPI_INLINE Prototype {return;}
+    // #define ACPI_EXTERNAL_RETURN_UINT32(Prototype) \
+    //     static ACPI_INLINE Prototype {return(0);}
+    // #define ACPI_EXTERNAL_RETURN_PTR(Prototype) \
+    //     static ACPI_INLINE Prototype {return(NULL);}
 #endif /* CONFIG_ACPI */
 
 /* Host-dependent types and defines for in-kernel ACPICA */
@@ -208,7 +212,7 @@ struct cache{};
 
 #define ACPI_MACHINE_WIDTH          64
 #define ACPI_USE_NATIVE_MATH64
-#define ACPI_EXPORT_SYMBOL(symbol)  EXPORT_SYMBOL(symbol);
+// #define ACPI_EXPORT_SYMBOL(symbol)  EXPORT_SYMBOL(symbol);
 #define strtoul                     simple_strtoul
 
 #define ACPI_CACHE_T                struct cache
@@ -220,12 +224,12 @@ struct cache{};
 #define ACPI_TO_INTEGER(p)          ((uintptr_t)(p))
 #define ACPI_OFFSET(d, f)           offsetof(d, f)
 
-#define ACPI_MSG_ERROR          KERN_ERR "ACPI Error: "
-#define ACPI_MSG_EXCEPTION      KERN_ERR "ACPI Exception: "
-#define ACPI_MSG_WARNING        KERN_WARNING "ACPI Warning: "
-#define ACPI_MSG_INFO           KERN_INFO "ACPI: "
+#define ACPI_MSG_ERROR          "ACPI Error: "
+#define ACPI_MSG_EXCEPTION      "ACPI Exception: "
+#define ACPI_MSG_WARNING        "ACPI Warning: "
+#define ACPI_MSG_INFO           "ACPI: "
 
-#define ACPI_MSG_BIOS_ERROR     KERN_ERR "ACPI BIOS Error (bug): "
-#define ACPI_MSG_BIOS_WARNING   KERN_WARNING "ACPI BIOS Warning (bug): "
+#define ACPI_MSG_BIOS_ERROR     "ACPI BIOS Error (bug): "
+#define ACPI_MSG_BIOS_WARNING   "ACPI BIOS Warning (bug): "
 
 #endif /* __ACZIGGURAT_H__ */

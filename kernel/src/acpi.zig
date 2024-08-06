@@ -1,4 +1,5 @@
 pub const std = @import("std");
+const acpica = @cImport(@cInclude("acpi.h"));
 
 const log = std.log.scoped(.acpi);
 
@@ -79,6 +80,10 @@ fn checksum_table(table: [*]u8, length: u64) bool {
         sum += table[i];
     }
     return (sum & 0xFF) == 0;
+}
+
+pub fn apica_test() void {
+    log.info("ACPICA version: {x}\n", .{acpica.ACPI_CA_VERSION});
 }
 
 test "acpi struct sizing" {

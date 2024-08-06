@@ -124,6 +124,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     // elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
+    acpi.apica_test();
     log.info("done\n", .{});
     done();
 }
