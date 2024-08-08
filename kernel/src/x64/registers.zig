@@ -77,7 +77,7 @@ pub const CR3 = packed struct {
             .two_mb => page_table.PageType.two_mb,
             .one_gb => page_table.PageType.one_gb,
         };
-        const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
+        const pml4: *volatile page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
         var pml4e: *volatile page_table.PML4Entry = &pml4[addr.pml4];
         if (!pml4e.present) {
             // we need to create a new pml4e pointing to a new pdpt
@@ -101,7 +101,7 @@ pub const CR3 = packed struct {
         std.debug.assert(pml4e.present);
 
         log.debug("following pdpt at 0x{x}\n", .{pml4e.getPdpt()});
-        const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
+        const pdpt: *volatile page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         var pdpte: *volatile page_table.PdptEntry = &pdpt[addr.directory_pointer];
         if (page_type == page_table.PageType.one_gb) {
             if (pdpte.huge_page.present) {
@@ -144,8 +144,9 @@ pub const CR3 = packed struct {
         }
 
         std.debug.assert(pdpte.huge_page.present);
+
         log.debug("following pd at 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
-        const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
+        const pd: *volatile page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
         var pde: *volatile page_table.PdEntry = &pd[addr.directory];
         if (page_type == page_table.PageType.two_mb) {
             if (pde.huge_page.present) {
@@ -188,7 +189,7 @@ pub const CR3 = packed struct {
         std.debug.assert(page_type == page_table.PageType.four_kb);
 
         log.debug("following pt at 0x{x}\n", .{pde.page_table.getPageTable()});
-        const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
+        const pt: *volatile page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
         var pte: *volatile page_table.PtEntry = &pt[addr.table];
         if (pte.present) {
             return page_table.MapError.AlreadyPresent;
@@ -205,6 +206,92 @@ pub const CR3 = packed struct {
         pte.setPage(physical_address);
         invalidatePage(@bitCast(page.getAddress()));
         return;
+    }
+
+    pub fn setFlags(self: CR3, page: page_table.Page, hhdm_offset: u64, flags: PageFlags) bool {
+        const addr = switch (page) {
+            .four_kb => |virt| virt,
+            .two_mb => |virt| virt,
+            .one_gb => |virt| virt,
+        };
+        const page_type = switch (page) {
+            .four_kb => page_table.PageType.four_kb,
+            .two_mb => page_table.PageType.two_mb,
+            .one_gb => page_table.PageType.one_gb,
+        };
+
+        const pml4: *volatile page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
+        var pml4e: *volatile page_table.PML4Entry = &pml4[addr.pml4];
+        if (!pml4e.present) {
+            return false;
+        }
+        pml4e.user_supervisor = true;
+        pml4e.read_write = true;
+
+        log.debug("following pdpt at 0x{x}\n", .{pml4e.getPdpt()});
+        const pdpt: *volatile page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
+        var pdpte: *volatile page_table.PdptEntry = &pdpt[addr.directory_pointer];
+        if (page_type == page_table.PageType.one_gb) {
+            if (!pdpte.huge_page.present) {
+                return false;
+            }
+            pdpte.huge_page.read_write = flags.write;
+            pdpte.huge_page.user_supervisor = flags.user;
+            invalidatePage(@bitCast(page.getAddress()));
+            return true;
+        }
+        if (!pdpte.page_directory.present) {
+            return false;
+        }
+        if (pdpte.isHugePage()) {
+            // we are trying to change flags on one part of a huge page, fail
+            return false;
+        }
+
+        pdpte.page_directory.user_supervisor = true;
+        pdpte.page_directory.read_write = true;
+        pdpte.page_directory.execute_disable = false;
+
+        log.debug("following pd at 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
+        const pd: *volatile page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
+        var pde: *volatile page_table.PdEntry = &pd[addr.directory];
+        if (!pde.page_table.present) {
+            return false;
+        }
+        if (page_type == page_table.PageType.two_mb) {
+            pde.huge_page.read_write = flags.write;
+            pde.huge_page.user_supervisor = flags.user;
+            invalidatePage(@bitCast(page.getAddress()));
+            return true;
+        }
+        if (pde.isHugePage()) {
+            // we are trying to change flags on one part of a huge page, fail
+            return false;
+        }
+
+        pde.page_table.read_write = true;
+        pde.page_table.user_supervisor = true;
+        pde.page_table.execute_disable = false;
+
+        log.debug("following pt at 0x{x}\n", .{pde.page_table.getPageTable()});
+        const pt: *volatile page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
+        var pte: *volatile page_table.PtEntry = &pt[addr.table];
+        if (!pte.present) {
+            return false;
+        }
+        pte.read_write = flags.write;
+        pte.user_supervisor = flags.user;
+        invalidatePage(@bitCast(page.getAddress()));
+        return true;
+    }
+
+    pub fn setFlagsRange(self: CR3, start: u64, size: u64, hhdm_offset: u64, flags: PageFlags) void {
+        std.debug.assert(start % 4096 == 0);
+        const page_count = @divExact(size, 4096);
+        var i: u64 = 0;
+        while (i < page_count) : (i += 1) {
+            _ = self.setFlags(page_table.Page{ .four_kb = @bitCast(@as(u64, start + 4096 * i)) }, hhdm_offset, flags);
+        }
     }
 
     pub fn allocateRange(self: CR3, start: u64, size: u64, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator, flags: PageFlags) void {

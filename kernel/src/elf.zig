@@ -173,9 +173,19 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
             const start_page = pheader.virtual_address & (~@as(u64, 0xFFF));
             const page_count = (end_page - start_page) / 4096 + 1;
             cr3.allocateRange(start_page, page_count * 4096, hhdm_offset, frame_allocator, registers.PageFlags{
+                .user = false,
+                .write = true,
+                .execute = false,
+            });
+            const start_ptr: [*]u8 = @ptrFromInt(pheader.virtual_address);
+            const file_bytes = file[pheader.offset..(pheader.offset + pheader.file_size)];
+
+            @memcpy(start_ptr, file_bytes);
+
+            cr3.setFlagsRange(start_page, page_count * 4096, hhdm_offset, registers.PageFlags{
                 .user = true,
-                .write = pheader.flags.writable,
                 .execute = pheader.flags.executable,
+                .write = pheader.flags.writable,
             });
         }
     }

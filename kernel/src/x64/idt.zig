@@ -48,12 +48,27 @@ inline fn done() noreturn {
     }
 }
 
+const PageFaultErrorCode = packed struct {
+    present: bool,
+    write: bool,
+    user: bool,
+    reserved_write: bool,
+    instruction_fetch: bool,
+    protection_key: bool,
+    shadow_stack: bool,
+    _1: u8,
+    software_guard_extensions: bool,
+    _2: u16,
+    _3: u32,
+};
+
 export fn pageFaultHandler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
     const address = asm volatile (
         \\movq %CR2, %rax
         : [ret] "= {rax}" (-> usize),
     );
-    log.err("page fault! At address: 0x{x} with error code: 0x{x}\n", .{ address, err });
+    const err2: PageFaultErrorCode = @bitCast(err);
+    log.err("page fault! At address: 0x{x} with error code: {}\n", .{ address, err2 });
     done();
 }
 
@@ -117,4 +132,8 @@ pub fn loadIdt() void {
     IdtR.offset = @intFromPtr(&IDT);
     const x = @intFromPtr(&IdtR);
     lidt(x);
+}
+
+test "idt sizes" {
+    try std.testing.expectEqual(64, @bitSizeOf(PageFaultErrorCode));
 }

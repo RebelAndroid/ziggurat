@@ -28,7 +28,7 @@ run: $(IMAGE_NAME).iso
 
 .PHONY: run-uefi
 run-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot -d int -s -S -no-shutdown
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot -d int -no-shutdown
 
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd
@@ -40,6 +40,8 @@ run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 
 .PHONY: zig-test
 zig-test:
+	zig test kernel/src/x64/idt.zig
+	zig test kernel/src/x64/tss.zig
 	zig test kernel/src/x64/page_table.zig
 	zig test kernel/src/acpi.zig
 	zig test kernel/src/x64/msr.zig
