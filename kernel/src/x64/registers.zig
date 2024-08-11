@@ -237,6 +237,7 @@ pub const CR3 = packed struct {
             }
             pdpte.huge_page.read_write = flags.write;
             pdpte.huge_page.user_supervisor = flags.user;
+            pdpte.huge_page.execute_disable = !flags.execute;
             invalidatePage(@bitCast(page.getAddress()));
             return true;
         }
@@ -261,6 +262,7 @@ pub const CR3 = packed struct {
         if (page_type == page_table.PageType.two_mb) {
             pde.huge_page.read_write = flags.write;
             pde.huge_page.user_supervisor = flags.user;
+            pde.huge_page.execute_disable = !flags.execute;
             invalidatePage(@bitCast(page.getAddress()));
             return true;
         }
@@ -281,6 +283,7 @@ pub const CR3 = packed struct {
         }
         pte.read_write = flags.write;
         pte.user_supervisor = flags.user;
+        pte.execute_disable = !flags.execute;
         invalidatePage(@bitCast(page.getAddress()));
         return true;
     }
