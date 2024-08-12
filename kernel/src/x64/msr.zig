@@ -73,7 +73,7 @@ pub fn readLstar() u64 {
 
 /// IA32_LSTAR is the target of syscall
 pub fn writeLstar(lstar: u64) void {
-    writeMsr(0xC0000081, @bitCast(lstar));
+    writeMsr(0xC0000082, @bitCast(lstar));
 }
 
 /// IA32_FMASK controls rflags

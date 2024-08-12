@@ -30,6 +30,10 @@ run: $(IMAGE_NAME).iso
 run-uefi: ovmf $(IMAGE_NAME).iso
 	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot -d int -no-shutdown
 
+.PHONY: run-gdb-uefi
+run-gdb-uefi: ovmf $(IMAGE_NAME).iso
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -no-reboot -d int -s -S -no-shutdown
+
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd
 	qemu-system-x86_64 -M q35 -m 2G -hda $(IMAGE_NAME).hdd

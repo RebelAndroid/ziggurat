@@ -121,12 +121,10 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
-    log.info("code: 0x{x} data: 0x{x}\n", .{ @intFromPtr(&main), @intFromPtr(&framebuffer_request) });
-
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(entry_point, 0x202);
 
-    acpi.apica_test();
+    // acpi.apica_test();
     log.info("done\n", .{});
     done();
 }
