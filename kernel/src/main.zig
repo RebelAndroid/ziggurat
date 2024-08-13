@@ -118,11 +118,18 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
-    log.info("loading elf\n", .{});
-    const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+    log.info("features: {}\n", .{cpuid.get_feature_information()});
 
-    log.info("jumping to user mode\n", .{});
-    jump_to_user_mode(entry_point, 0x202);
+    log.info("enabling xsave\n", .{});
+    var cr4 = reg.get_cr4();
+    cr4.osxsave = true;
+    reg.set_cr4(cr4);
+
+    // log.info("loading elf\n", .{});
+    // const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+
+    // log.info("jumping to user mode\n", .{});
+    // jump_to_user_mode(entry_point, 0x202);
 
     // acpi.apica_test();
     log.info("done\n", .{});

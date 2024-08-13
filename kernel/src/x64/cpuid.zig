@@ -169,3 +169,44 @@ pub fn get_features1() CpuidFeatures1 {
     get_cpuid(0x07, 0, &x);
     return @bitCast(x);
 }
+
+const FeatureInformationEcx = packed struct {
+    sse3: bool,
+    pclmuqdq: bool,
+    dtes64: bool,
+    monitor: bool,
+    ds_cpl: bool,
+    vmx: bool,
+    smx: bool,
+    eist: bool,
+    tm2: bool,
+    ssse3: bool,
+    cnxt_id: bool,
+    sdbg: bool,
+    fma: bool,
+    cmpxchg16b: bool,
+    xtpr_update_control: bool,
+    pdcm: bool,
+    _1: bool,
+    pcid: bool,
+    dca: bool,
+    sse4_1: bool,
+    sse4_2: bool,
+    x2apic: bool,
+    movbe: bool,
+    popcnt: bool,
+    tsc_deadline: bool,
+    aesni: bool,
+    xsave: bool,
+    osxsave: bool,
+    avx: bool,
+    f16c: bool,
+    rdrand: bool,
+    _2: bool,
+};
+
+pub fn get_feature_information() FeatureInformationEcx {
+    var x = CpuidResult{};
+    get_cpuid(0x01, 0, &x);
+    return @bitCast(x.ecx);
+}

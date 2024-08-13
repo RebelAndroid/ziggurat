@@ -393,8 +393,8 @@ pub const CR4 = packed struct {
     _4: u38,
 };
 
-pub extern fn get_cr4() callconv(.C) u64;
-pub extern fn set_cr4(u64) callconv(.C) void;
+pub extern fn get_cr4() callconv(.C) CR4;
+pub extern fn set_cr4(CR4) callconv(.C) void;
 comptime {
     asm (
         \\.globl get_cr4

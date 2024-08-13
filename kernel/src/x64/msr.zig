@@ -44,14 +44,16 @@ pub const Efer = packed struct {
     _3: u48,
 };
 
+const EFER_INDEX = 0xC0000080;
 pub fn readEfer() Efer {
-    return @bitCast(readMsr(0xC0000080));
+    return @bitCast(readMsr(EFER_INDEX));
 }
 
 pub fn writeEfer(efer: Efer) void {
-    writeMsr(0xC0000080, @bitCast(efer));
+    writeMsr(EFER_INDEX, @bitCast(efer));
 }
 
+const STAR_INDEX: u32 = 0xC0000081;
 pub const Star = packed struct {
     _1: u32 = 0,
     kernel_cs_selector: gdt.SegmentSelector,
@@ -59,31 +61,33 @@ pub const Star = packed struct {
 };
 
 pub fn readStar() Star {
-    return @bitCast(readMsr(0xC0000081));
+    return @bitCast(readMsr(STAR_INDEX));
 }
 
 pub fn writeStar(star: Star) void {
-    writeMsr(0xC0000081, @bitCast(star));
+    writeMsr(STAR_INDEX, @bitCast(star));
 }
 
+const LSTAR_INDEX: u32 = 0xC0000082;
 /// IA32_LSTAR is the target of syscall
 pub fn readLstar() u64 {
-    return @bitCast(readMsr(0xC0000082));
+    return @bitCast(readMsr(LSTAR_INDEX));
 }
 
 /// IA32_LSTAR is the target of syscall
 pub fn writeLstar(lstar: u64) void {
-    writeMsr(0xC0000082, @bitCast(lstar));
+    writeMsr(LSTAR_INDEX, @bitCast(lstar));
 }
 
+const FMASK_INDEX: u32 = 0xC0000084;
 /// IA32_FMASK controls rflags
 pub fn readFmask() u64 {
-    return @bitCast(readMsr(0xC0000084));
+    return @bitCast(readMsr(FMASK_INDEX));
 }
 
 /// IA32_FMASK controls rflags
 pub fn writeFmask(fmask: u64) u64 {
-    writeMsr(0xC0000084, @bitCast(fmask));
+    writeMsr(FMASK_INDEX, @bitCast(fmask));
 }
 
 test "msr sizes" {
