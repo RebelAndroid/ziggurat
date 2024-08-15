@@ -125,9 +125,10 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
     msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
+    log.info("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
 
-    // const new_stack = frame_allocator.allocate_frame();
-    // kernel_rsp = new_stack + hhdm_offset;
+    const new_stack = frame_allocator.allocate_frame();
+    kernel_rsp = new_stack + hhdm_offset;
 
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(entry_point, 0x202);
@@ -182,4 +183,6 @@ comptime {
     );
 }
 
-pub export fn syscall_handler() callconv(.C) void {}
+pub export fn syscall_handler() callconv(.C) void {
+    log.info("Syscall!\n", .{});
+}
