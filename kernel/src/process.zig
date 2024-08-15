@@ -4,6 +4,7 @@ const registers = @import("x64/registers.zig");
 pub const Process = extern struct {
     rax: u64 = 0,
     rbx: u64 = 0,
+    // this cannot be set when a process is created because it is used by sysret
     rcx: u64 = 0,
     rdx: u64 = 0,
     rsi: u64 = 0,
@@ -13,6 +14,7 @@ pub const Process = extern struct {
     r8: u64 = 0,
     r9: u64 = 0,
     r10: u64 = 0,
+    // this cannot be set when a process is created because it is used by sysret
     r11: u64 = 0,
     r12: u64 = 0,
     r13: u64 = 0,
@@ -28,4 +30,6 @@ test "jump to user mode offsets" {
     try std.testing.expectEqual(128, @offsetOf(Process, "rip"));
     try std.testing.expectEqual(136, @offsetOf(Process, "rflags"));
     try std.testing.expectEqual(48, @offsetOf(Process, "rsp"));
+    try std.testing.expectEqual(144, @offsetOf(Process, "cr3"));
+    try std.testing.expectEqual(120, @offsetOf(Process, "r15"));
 }

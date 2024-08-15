@@ -141,6 +141,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     init_process.rsp = 0x4000FF0;
     init_process.rflags = @bitCast(@as(u64, 0x202));
     init_process.rip = entry_point;
+    init_process.cr3 = new_cr3;
 
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(&init_process);
@@ -156,9 +157,27 @@ comptime {
         \\.globl jump_to_user_mode
         \\.type jump_to_user_mode @function
         \\jump_to_user_mode:
+        \\  movq 144(%rdi), %rax # use rax as a temp register to load cr3
+        \\  movq %rax, %cr3
+        \\  movq (%rdi), %rax
+        \\  movq 8(%rdi), %rbx
+        \\  # can't set rcx
+        \\  movq 24(%rdi), %rdx
+        \\  movq 32(%rdi), %rsi
+        \\  # can't set rdi yet
+        \\  movq 48(%rdi), %rsp
+        \\  movq 56(%rdi), %rbp
+        \\  movq 64(%rdi), %r8
+        \\  movq 72(%rdi), %r9
+        \\  movq 80(%rdi), %r10
+        \\  # can't set r11
+        \\  movq 96(%rdi), %r12
+        \\  movq 104(%rdi), %r13
+        \\  movq 112(%rdi), %r14
+        \\  movq 120(%rdi), %r15
         \\  movq 128(%rdi), %rcx
         \\  movq 136(%rdi), %r11
-        \\  movq 48(%rdi), %rsp
+        \\  movq 40(%rdi), %rdi # we need to load rdi last because it is our pointer to the process struct
         \\  sysretq
     );
 }
