@@ -110,7 +110,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         .user_cs_selector = gdt.user_code_segment_selector,
     });
 
-    msr.writeLstar(0x69420);
+    log.info("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
+    msr.writeLstar(@intFromPtr(&syscall_wrapper));
 
     log.info("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
@@ -120,16 +121,16 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     log.info("features: {}\n", .{cpuid.get_feature_information()});
 
-    log.info("enabling xsave\n", .{});
-    var cr4 = reg.get_cr4();
-    cr4.osxsave = true;
-    reg.set_cr4(cr4);
+    log.info("loading elf\n", .{});
+    const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
-    // log.info("loading elf\n", .{});
-    // const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+    msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
 
-    // log.info("jumping to user mode\n", .{});
-    // jump_to_user_mode(entry_point, 0x202);
+    // const new_stack = frame_allocator.allocate_frame();
+    // kernel_rsp = new_stack + hhdm_offset;
+
+    log.info("jumping to user mode\n", .{});
+    jump_to_user_mode(entry_point, 0x202);
 
     // acpi.apica_test();
     log.info("done\n", .{});
@@ -147,3 +148,38 @@ comptime {
         \\  sysretq
     );
 }
+
+pub var kernel_rsp: u64 align(4096) = 0;
+
+// when syscall is executed, the return address is saved into rcx and rflags is saved into r11
+pub extern fn syscall_wrapper() callconv(.Naked) void;
+comptime {
+    asm (
+        \\
+        \\.globl syscall_wrapper
+        \\.type syscall_wrapper @function
+        \\syscall_wrapper:
+        \\  movq %rsp, %rax # move the user stack pointer to a clobber register
+        \\  swapgs # swap in the kernel's gs register (kernel thread local storage)
+        \\  movq %gs:0, %rsp # load the kernel stack
+        \\  pushq %rax # save the user stack
+        \\  pushq %r11 # save r11 (flags)
+        \\  pushq %rcx # save rcx (return address)
+        \\  call syscall_handler
+        \\  popq %rcx # restore rcx (return address)
+        \\  popq %r11 # restore r11 (flags)
+        \\  popq %rsp # restore the user stack
+        \\  movq $0, %rax # clear all of the scratch registers to avoid information leakage
+        \\  movq $0, %rdi
+        \\  movq $0, %rsi
+        \\  movq $0, %rdx
+        \\  movq $0, %rcx
+        \\  movq $0, %r8
+        \\  movq $0, %r9
+        \\  movq $0, %r10
+        \\  movq $0, %r11
+        \\  sysretq
+    );
+}
+
+pub export fn syscall_handler() callconv(.C) void {}

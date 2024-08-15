@@ -86,8 +86,19 @@ pub fn readFmask() u64 {
 }
 
 /// IA32_FMASK controls rflags
-pub fn writeFmask(fmask: u64) u64 {
+pub fn writeFmask(fmask: u64) void {
     writeMsr(FMASK_INDEX, @bitCast(fmask));
+}
+
+const KERNEL_GS_INDEX: u32 = 0xC0000102;
+/// IA32_FMASK controls rflags
+pub fn readKernelGsBase() u64 {
+    return readMsr(KERNEL_GS_INDEX);
+}
+
+/// IA32_FMASK controls rflags
+pub fn writeKernelGsBase(gs_base: u64) void {
+    writeMsr(KERNEL_GS_INDEX, gs_base);
 }
 
 test "msr sizes" {
