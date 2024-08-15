@@ -166,7 +166,9 @@ comptime {
         \\  pushq %rax # save the user stack
         \\  pushq %r11 # save r11 (flags)
         \\  pushq %rcx # save rcx (return address)
+        \\  pushq $0 # align the stack to a 16 byte boundary
         \\  call syscall_handler
+        \\  popq %rcx # remove the alignment 0
         \\  popq %rcx # restore rcx (return address)
         \\  popq %r11 # restore r11 (flags)
         \\  popq %rsp # restore the user stack
@@ -174,11 +176,9 @@ comptime {
         \\  movq $0, %rdi
         \\  movq $0, %rsi
         \\  movq $0, %rdx
-        \\  movq $0, %rcx
         \\  movq $0, %r8
         \\  movq $0, %r9
         \\  movq $0, %r10
-        \\  movq $0, %r11
         \\  sysretq
     );
 }
