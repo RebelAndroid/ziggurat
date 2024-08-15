@@ -119,26 +119,32 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
-    log.info("features: {}\n", .{cpuid.get_feature_information()});
-
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
     msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
     log.info("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
 
+    log.info("creating user mode stack\n", .{});
+    const user_stack = frame_allocator.allocate_frame();
+    new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, hhdm_offset, &frame_allocator, .{
+        .execute = false,
+        .write = true,
+        .user = true,
+    }) catch unreachable;
+
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
 
     log.info("jumping to user mode\n", .{});
-    jump_to_user_mode(entry_point, 0x202);
+    jump_to_user_mode(entry_point, 0x202, 0x4000FF0);
 
     // acpi.apica_test();
     log.info("done\n", .{});
     done();
 }
 
-pub extern fn jump_to_user_mode(entry_point: u64, rflags: u64) callconv(.C) void;
+pub extern fn jump_to_user_mode(entry_point: u64, rflags: u64, rsp: u64) callconv(.C) void;
 comptime {
     asm (
         \\.globl jump_to_user_mode
@@ -146,6 +152,7 @@ comptime {
         \\jump_to_user_mode:
         \\  movq %rdi, %rcx
         \\  movq %rsi, %r11
+        \\  movq %rdx, %rsp
         \\  sysretq
     );
 }
@@ -160,6 +167,7 @@ comptime {
         \\.globl syscall_wrapper
         \\.type syscall_wrapper @function
         \\syscall_wrapper:
+        \\  cli # disable interrupts
         \\  movq %rsp, %rax # move the user stack pointer to a clobber register
         \\  swapgs # swap in the kernel's gs register (kernel thread local storage)
         \\  movq %gs:0, %rsp # load the kernel stack
@@ -167,22 +175,24 @@ comptime {
         \\  pushq %r11 # save r11 (flags)
         \\  pushq %rcx # save rcx (return address)
         \\  pushq $0 # align the stack to a 16 byte boundary
+        \\  movq %r10, %rcx # move parameter 4 (r10) into rcx to satisfy C abi
         \\  call syscall_handler
         \\  popq %rcx # remove the alignment 0
         \\  popq %rcx # restore rcx (return address)
         \\  popq %r11 # restore r11 (flags)
         \\  popq %rsp # restore the user stack
-        \\  movq $0, %rax # clear all of the scratch registers to avoid information leakage
-        \\  movq $0, %rdi
+        \\  movq $0, %rdi # clear clobber registers, we don't clear rax because it is the return value
         \\  movq $0, %rsi
         \\  movq $0, %rdx
         \\  movq $0, %r8
         \\  movq $0, %r9
         \\  movq $0, %r10
+        \\  sti # enable interrupts
         \\  sysretq
     );
 }
 
-pub export fn syscall_handler() callconv(.C) void {
-    log.info("Syscall!\n", .{});
+pub export fn syscall_handler(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) u64 {
+    log.info("Syscall!\n rdi: {}, rsi: {}, rdx: {}, rcx: {}, r8: {}, r9: {}\n", .{ rdi, rsi, rdx, rcx, r8, r9 });
+    return 0;
 }

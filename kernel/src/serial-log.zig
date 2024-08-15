@@ -14,7 +14,7 @@ pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLi
         // remember that log levels are sorted backwards, ie the smallest int value is err
         .registers => @intFromEnum(level) <= @intFromEnum(std.log.Level.info),
         .main => @intFromEnum(level) <= @intFromEnum(std.log.Level.debug),
-        .elf => @intFromEnum(level) <= @intFromEnum(std.log.Level.info),
+        .elf => @intFromEnum(level) <= @intFromEnum(std.log.Level.warn),
         else => true,
     };
     // const b = true;
