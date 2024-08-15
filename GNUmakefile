@@ -44,6 +44,7 @@ run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 
 .PHONY: zig-test
 zig-test:
+	zig test kernel/src/process.zig
 	zig test kernel/src/x64/xsave.zig
 	zig test kernel/src/x64/idt.zig
 	zig test kernel/src/x64/tss.zig

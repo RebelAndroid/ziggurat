@@ -12,6 +12,7 @@ const framebuffer_log = @import("framebuffer-log.zig");
 const pcie = @import("pcie.zig");
 const msr = @import("x64/msr.zig");
 const elf = @import("elf.zig");
+const process = @import("process.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -113,6 +114,9 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
     msr.writeLstar(@intFromPtr(&syscall_wrapper));
 
+    msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
+    log.info("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
+
     log.info("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
     const cr3 = reg.get_cr3();
@@ -121,9 +125,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
-
-    msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
-    log.info("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
 
     log.info("creating user mode stack\n", .{});
     const user_stack = frame_allocator.allocate_frame();
@@ -136,23 +137,28 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
 
+    var init_process: process.Process = .{};
+    init_process.rsp = 0x4000FF0;
+    init_process.rflags = @bitCast(@as(u64, 0x202));
+    init_process.rip = entry_point;
+
     log.info("jumping to user mode\n", .{});
-    jump_to_user_mode(entry_point, 0x202, 0x4000FF0);
+    jump_to_user_mode(&init_process);
 
     // acpi.apica_test();
     log.info("done\n", .{});
     done();
 }
 
-pub extern fn jump_to_user_mode(entry_point: u64, rflags: u64, rsp: u64) callconv(.C) void;
+pub extern fn jump_to_user_mode(process: *const process.Process) callconv(.C) void;
 comptime {
     asm (
         \\.globl jump_to_user_mode
         \\.type jump_to_user_mode @function
         \\jump_to_user_mode:
-        \\  movq %rdi, %rcx
-        \\  movq %rsi, %r11
-        \\  movq %rdx, %rsp
+        \\  movq 128(%rdi), %rcx
+        \\  movq 136(%rdi), %r11
+        \\  movq 48(%rdi), %rsp
         \\  sysretq
     );
 }
