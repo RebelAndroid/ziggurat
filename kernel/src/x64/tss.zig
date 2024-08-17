@@ -1,19 +1,26 @@
 const std = @import("std");
 
-const Tss = extern struct {
-    _1: u32,
-    rsp: [3]u64 align(4),
-    _2: u64 align(4),
-    ist: [7]u64 align(4),
-    _3: u64 align(4),
-    _4: u16,
-    iopb: u16,
+pub const Tss = extern struct {
+    _1: u32 = 0,
+    rsp: [3]u64 align(4) = [_]u64{ 0, 0, 0 },
+    _2: u64 align(4) = 0,
+    ist: [7]u64 align(4) = [_]u64{ 0, 0, 0, 0, 0, 0, 0 },
+    _3: u64 align(4) = 0,
+    _4: u16 = 0,
+    iopb: u16 = 0,
 };
 
-const TssIopb = extern struct {
-    tss: Tss,
+pub const TssIopb = extern struct {
+    tss: Tss = Tss{},
     iopb: u8 = 0xFF,
 };
+
+pub var tss_iopb = TssIopb{};
+
+pub fn initTss(kernel_stack: u64) void {
+    tss_iopb.tss.rsp[0] = kernel_stack;
+    tss_iopb.tss.iopb = 104; // the iopb immediately follows the tss
+}
 
 test "tss sizes" {
     try std.testing.expectEqual(104, @sizeOf(Tss));

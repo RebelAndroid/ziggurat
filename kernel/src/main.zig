@@ -13,6 +13,7 @@ const pcie = @import("pcie.zig");
 const msr = @import("x64/msr.zig");
 const elf = @import("elf.zig");
 const process = @import("process.zig");
+const tss = @import("x64/tss.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -138,6 +139,13 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
+
+    log.info("kernel rsp: 0x{x}\n", .{kernel_rsp});
+
+    tss.initTss(kernel_rsp);
+
+    log.info("tss: {}\n", .{tss.tss_iopb});
+    log.info("tss address: 0x{x}\n", .{@intFromPtr(&tss.tss_iopb)});
 
     var init_process: process.Process = .{};
     init_process.rsp = 0x4000FF0;

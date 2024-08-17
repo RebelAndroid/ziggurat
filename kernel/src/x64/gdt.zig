@@ -1,8 +1,9 @@
 const std = @import("std");
 const log = std.log.scoped(.gdt);
+const tss = @import("tss.zig");
 
 pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-pub var Gdt: [5]GdtEntry = std.mem.zeroes([5]GdtEntry);
+pub var Gdt: [7]GdtEntry = std.mem.zeroes([7]GdtEntry);
 
 pub const GdtDescriptor = packed struct {
     size: u16,
@@ -184,6 +185,30 @@ pub fn loadGdt() void {
         .long_mode_code = false,
     };
 
+    const tss_address: u64 = @intFromPtr(&tss.tss_iopb);
+    const tss_limit: u64 = @sizeOf(tss.TssIopb);
+
+    log.info("tss address: 0x{x}\n", .{tss_address});
+
+    Gdt[5] = GdtEntry{
+        .limit1 = @truncate(tss_limit),
+        .base1 = @truncate(tss_address),
+        .base2 = @truncate(tss_address >> 16),
+        .accessed = true,
+        .rw = false,
+        .direction_conforming = false,
+        .executable = false,
+        .descriptor_privilege_level = 0,
+        .limit2 = @truncate(tss_limit >> 16),
+        .long_mode_code = false,
+        .size = false,
+        .granularity = false,
+        .base3 = @truncate(tss_limit >> 24),
+        .descriptor_type = false,
+    };
+    // this has a completely different format, see Intel SDM Vol 3. 8-6
+    Gdt[6] = @bitCast(tss_address >> 32);
+
     GdtR.offset = @intFromPtr(&Gdt);
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
     const x = @intFromPtr(&GdtR);
@@ -191,6 +216,12 @@ pub fn loadGdt() void {
 
     setDataSegmentRegisters(kernel_data_segment_selector);
     setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
+
+    flushTss(@bitCast(SegmentSelector{
+        .requestor_privilege_level = 0,
+        .selector_index = 5,
+        .table_indicator = false,
+    }));
 }
 
 extern fn lgdt(u64) callconv(.C) void;
@@ -211,6 +242,17 @@ comptime {
         \\.type sgdt @function
         \\sgdt:
         \\  sgdtq (%rdi)
+        \\  retq
+    );
+}
+
+extern fn flushTss(u16) callconv(.C) void;
+comptime {
+    asm (
+        \\.globl flushTss
+        \\.type flushTss @function
+        \\flushTss:
+        \\  ltr %di
         \\  retq
     );
 }

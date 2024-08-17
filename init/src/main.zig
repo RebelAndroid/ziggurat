@@ -14,7 +14,8 @@ comptime {
 }
 
 pub export fn _start() noreturn {
-    while (true) {
-        _ = syscall(1, 2, 3, 4, 5, 6);
-    }
+    _ = syscall(1, 2, 3, 4, 5, 6);
+
+    _ = @as(*volatile u8, @ptrFromInt(16 * 6 + 9)).*;
+    while (true) {}
 }
