@@ -126,6 +126,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
+    log.info("entry point: 0x{x}\n", .{entry_point});
+
     log.info("creating user mode stack\n", .{});
     const user_stack = frame_allocator.allocate_frame();
     new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, hhdm_offset, &frame_allocator, .{
@@ -212,6 +214,7 @@ comptime {
         \\  movq $0, %r8
         \\  movq $0, %r9
         \\  movq $0, %r10
+        \\  swapgs
         \\  sti # enable interrupts
         \\  sysretq
     );

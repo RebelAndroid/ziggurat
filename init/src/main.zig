@@ -1,6 +1,6 @@
 const std = @import("std");
 
-extern fn syscall(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) noreturn;
+extern fn syscall(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) u64;
 comptime {
     asm (
         \\
@@ -9,15 +9,12 @@ comptime {
         \\syscall:
         \\  movq %rcx, %r10 # mov rcx into r10
         \\  syscall
-        \\ top:
-        \\  jmp top
+        \\  retq
     );
 }
 
 pub export fn _start() noreturn {
-    // asm volatile ("syscall");
-    _ = syscall(1, 2, 3, 4, 5, 6);
     while (true) {
-        asm volatile ("nop");
+        _ = syscall(1, 2, 3, 4, 5, 6);
     }
 }
