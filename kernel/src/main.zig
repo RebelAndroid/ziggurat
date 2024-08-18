@@ -94,6 +94,11 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         frame_allocator.free_frames(e.base, e.length / 0x1000);
     }
 
+    const new_stack2 = frame_allocator.allocate_frame();
+    // add 4080 to go to the top of the page with 16 byte alignment
+    log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset + 4080});
+    tss.initTss(new_stack2 + hhdm_offset + 4080);
+
     log.info("loading gdt\n", .{});
     gdt.loadGdt();
     log.info("loading idt\n", .{});
@@ -108,8 +113,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     log.info("setting star\n", .{});
     msr.writeStar(msr.Star{
-        .kernel_cs_selector = gdt.kernel_code_segment_selector,
-        .user_cs_selector = gdt.user_code_segment_selector,
+        .kernel_cs_selector = gdt.kernel_star_segment_selector,
+        .user_cs_selector = gdt.user_star_segment_selector,
     });
 
     log.info("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
@@ -140,16 +145,12 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
 
-    const new_stack2 = frame_allocator.allocate_frame();
-    log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset});
-    tss.initTss(new_stack2 + hhdm_offset);
-
     log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
     log.info("tss rsp0: 0x{x}\n", .{tss.tss_iopb.tss.rsp[0]});
     log.info("tss address: 0x{x}\n", .{@intFromPtr(&tss.tss_iopb)});
 
-    //_ = new_cr3.setFlags(.{ .four_kb = @bitCast(@intFromPtr(&tss.tss_iopb) & (~@as(u64, 0xFFF))) }, hhdm_offset, reg.PageFlags{ .user = true, .execute = false, .write = true });
+    _ = new_cr3.setFlags(.{ .four_kb = @bitCast(@intFromPtr(&tss.tss_iopb) & (~@as(u64, 0xFFF))) }, hhdm_offset, reg.PageFlags{ .user = true, .execute = false, .write = true });
 
     var init_process: process.Process = .{};
     init_process.rsp = 0x4000FF0;

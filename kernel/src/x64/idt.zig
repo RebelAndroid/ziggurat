@@ -91,7 +91,7 @@ fn setIdtEntries() void {
         .segment_selector = gdt.kernel_code_segment_selector,
         .ist = 0,
         .gate_type = 0xF,
-        .dpl = 0,
+        .dpl = 3,
     };
     breakpoint_entry.setOffset(@intFromPtr(&breakpointHandler));
 

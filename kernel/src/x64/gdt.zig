@@ -46,7 +46,7 @@ pub const GdtEntry = packed struct {
     pub fn get_base(self: GdtEntry) u64 {
         return @as(u64, self.base1) | (@as(u64, self.base2) << 16) | (@as(u64, self.base3) << 24);
     }
-    pub fn set_base(self: GdtEntry, base: u64) void {
+    pub fn set_base(self: *volatile GdtEntry, base: u64) void {
         self.base1 = @truncate(base);
         self.base2 = @truncate(base >> 16);
         self.base3 = @truncate(base >> 24);
@@ -69,55 +69,45 @@ pub const SegmentSelector = packed struct {
     selector_index: u13,
 };
 
-pub const kernel_data_segment_selector = SegmentSelector{
+pub const kernel_star_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = 0,
+};
+
+pub const user_star_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
     .selector_index = 2,
 };
-pub const kernel_code_segment_selector = SegmentSelector{
+
+pub const kernel_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
     .selector_index = 1,
+};
+pub const kernel_code_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = 2,
 };
 
 pub const user_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = 4,
+    .selector_index = 3,
 };
 pub const user_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = 3,
+    .selector_index = 4,
 };
 
 pub fn loadGdt() void {
     // The first gdt entry is always a null descriptor
     Gdt[0] = std.mem.zeroes(GdtEntry);
-    // The second entry will be the kernel code segment
-    // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
-    Gdt[kernel_code_segment_selector.selector_index] = GdtEntry{
-        // CS.Base := 0, default base
-        // CS.Limit := 0xFFFFF, default limit
-        // CS.TYPE := 11
-        .accessed = true,
-        .rw = true,
-        .direction_conforming = false,
-        .executable = true,
-        // CS.S := 1
-        .descriptor_type = true,
-        // CS.DPL := 0
-        .descriptor_privilege_level = 0,
-        // CS.P := 1, default present
-        // CS.L := 1
-        .long_mode_code = true,
-        // CS.D := 0
-        .size = false,
-        // CS.G := 1
-        .granularity = true,
-    };
 
-    // The third entry will be the kernel data segment
+    // The second entry will be the kernel data segment
     // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
     Gdt[kernel_data_segment_selector.selector_index] = GdtEntry{
         // SS.Base := 0, default base
@@ -140,20 +130,20 @@ pub fn loadGdt() void {
         .long_mode_code = false,
     };
 
-    // The fourth entry will be the user code segment
-    // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
-    Gdt[user_code_segment_selector.selector_index] = GdtEntry{
+    // The third entry will be the kernel code segment
+    // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
+    Gdt[kernel_code_segment_selector.selector_index] = GdtEntry{
         // CS.Base := 0, default base
         // CS.Limit := 0xFFFFF, default limit
-        // CS.Type := 11
+        // CS.TYPE := 11
         .accessed = true,
         .rw = true,
         .direction_conforming = false,
         .executable = true,
         // CS.S := 1
         .descriptor_type = true,
-        // CS.DPL := 3
-        .descriptor_privilege_level = 3,
+        // CS.DPL := 0
+        .descriptor_privilege_level = 0,
         // CS.P := 1, default present
         // CS.L := 1
         .long_mode_code = true,
@@ -162,7 +152,8 @@ pub fn loadGdt() void {
         // CS.G := 1
         .granularity = true,
     };
-    // The fifth entry will be the user data segment
+
+    // The fourth entry will be the user data segment
     // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
     Gdt[user_data_segment_selector.selector_index] = GdtEntry{
         // SS.Base := 0, default base
@@ -185,10 +176,38 @@ pub fn loadGdt() void {
         .long_mode_code = false,
     };
 
+    // The fifth entry will be the user code segment
+    // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
+    Gdt[user_code_segment_selector.selector_index] = GdtEntry{
+        // CS.Base := 0, default base
+        // CS.Limit := 0xFFFFF, default limit
+        // CS.Type := 11
+        .accessed = true,
+        .rw = true,
+        .direction_conforming = false,
+        .executable = true,
+        // CS.S := 1
+        .descriptor_type = true,
+        // CS.DPL := 3
+        .descriptor_privilege_level = 3,
+        // CS.P := 1, default present
+        // CS.L := 1
+        .long_mode_code = true,
+        // CS.D := 0
+        .size = false,
+        // CS.G := 1
+        .granularity = true,
+    };
+
     const tss_address: u64 = @intFromPtr(&tss.tss_iopb);
     const tss_limit: u64 = @sizeOf(tss.TssIopb);
 
     log.info("tss address: 0x{x}\n", .{tss_address});
+
+    log.info("kernel data segment selector: 0x{x}\n", .{@as(u16, @bitCast(kernel_data_segment_selector))});
+    log.info("kernel code segment selector: 0x{x}\n", .{@as(u16, @bitCast(kernel_code_segment_selector))});
+    log.info("user data segment selector: 0x{x}\n", .{@as(u16, @bitCast(user_data_segment_selector))});
+    log.info("user code segment selector: 0x{x}\n", .{@as(u16, @bitCast(user_code_segment_selector))});
 
     Gdt[5] = GdtEntry{
         .limit1 = @truncate(tss_limit),
@@ -206,6 +225,7 @@ pub fn loadGdt() void {
         .base3 = @truncate(tss_limit >> 24),
         .descriptor_type = false,
     };
+    Gdt[5].set_base(tss_address);
     // this has a completely different format, see Intel SDM Vol 3. 8-6
     Gdt[6] = @bitCast(tss_address >> 32);
 
