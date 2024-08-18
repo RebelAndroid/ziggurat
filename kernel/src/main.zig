@@ -140,12 +140,16 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
 
-    log.info("kernel rsp: 0x{x}\n", .{kernel_rsp});
+    const new_stack2 = frame_allocator.allocate_frame();
+    log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset});
+    tss.initTss(new_stack2 + hhdm_offset);
 
-    tss.initTss(kernel_rsp);
+    log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
-    log.info("tss: {}\n", .{tss.tss_iopb});
+    log.info("tss rsp0: 0x{x}\n", .{tss.tss_iopb.tss.rsp[0]});
     log.info("tss address: 0x{x}\n", .{@intFromPtr(&tss.tss_iopb)});
+
+    //_ = new_cr3.setFlags(.{ .four_kb = @bitCast(@intFromPtr(&tss.tss_iopb) & (~@as(u64, 0xFFF))) }, hhdm_offset, reg.PageFlags{ .user = true, .execute = false, .write = true });
 
     var init_process: process.Process = .{};
     init_process.rsp = 0x4000FF0;
@@ -192,6 +196,8 @@ comptime {
     );
 }
 
+/// Data that will be stored in the gs segment.
+/// The stack pointer loaded by the syscall handler.
 pub var kernel_rsp: u64 align(4096) = 0;
 
 // when syscall is executed, the return address is saved into rcx and rflags is saved into r11

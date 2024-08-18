@@ -15,7 +15,7 @@ pub const TssIopb = extern struct {
     iopb: u8 = 0xFF,
 };
 
-pub var tss_iopb = TssIopb{};
+pub var tss_iopb: TssIopb align(4096) = TssIopb{};
 
 pub fn initTss(kernel_stack: u64) void {
     tss_iopb.tss.rsp[0] = kernel_stack;
