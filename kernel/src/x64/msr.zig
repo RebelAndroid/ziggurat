@@ -101,7 +101,29 @@ pub fn writeKernelGsBase(gs_base: u64) void {
     writeMsr(KERNEL_GS_INDEX, gs_base);
 }
 
+const APIC_BASE_INDEX: u32 = 0x1B;
+pub const ApicBase = packed struct {
+    _1: u8 = 0,
+    // set if this processor is the bootstrap processor
+    bsp: bool,
+    _2: u1 = 0,
+    enable_x2apic: bool,
+    enable_xapic: bool,
+    apic_base: u24,
+    _3: u28,
+};
+
+pub fn readApicBase() ApicBase {
+    return @bitCast(readMsr(APIC_BASE_INDEX));
+}
+
+/// IA32_FMASK controls rflags
+pub fn writeApicBase(apic_base: ApicBase) void {
+    writeMsr(APIC_BASE_INDEX, @bitCast(apic_base));
+}
+
 test "msr sizes" {
     try std.testing.expectEqual(64, @bitSizeOf(Efer));
     try std.testing.expectEqual(64, @bitSizeOf(Star));
+    try std.testing.expectEqual(64, @bitSizeOf(ApicBase));
 }

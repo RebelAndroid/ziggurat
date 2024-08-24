@@ -54,7 +54,7 @@ pub const GdtEntry = packed struct {
     pub fn get_limit(self: GdtEntry) u64 {
         return @as(u64, self.limit1) | @as(u64, self.limit2) << 16;
     }
-    pub fn set_limit(self: GdtEntry, limit: u64) void {
+    pub fn set_limit(self: *volatile GdtEntry, limit: u64) void {
         self.limit1 = @truncate(limit);
         self.limit2 = @truncate(limit >> 16);
     }
@@ -72,7 +72,7 @@ pub const SegmentSelector = packed struct {
 pub const kernel_star_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = 0,
+    .selector_index = 1,
 };
 
 pub const user_star_segment_selector = SegmentSelector{
@@ -81,26 +81,27 @@ pub const user_star_segment_selector = SegmentSelector{
     .selector_index = 2,
 };
 
-pub const kernel_data_segment_selector = SegmentSelector{
-    .requestor_privilege_level = 0,
-    .table_indicator = false,
-    .selector_index = 1,
-};
 pub const kernel_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = 2,
+    .selector_index = kernel_star_segment_selector.selector_index,
+};
+
+pub const kernel_data_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = kernel_star_segment_selector.selector_index + 1,
 };
 
 pub const user_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = 3,
+    .selector_index = user_star_segment_selector.selector_index + 1,
 };
 pub const user_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = 4,
+    .selector_index = user_star_segment_selector.selector_index + 2,
 };
 
 pub fn loadGdt() void {
@@ -199,35 +200,21 @@ pub fn loadGdt() void {
         .granularity = true,
     };
 
-    const tss_address: u64 = @intFromPtr(&tss.tss_iopb);
-    const tss_limit: u64 = @sizeOf(tss.TssIopb);
-
-    log.info("tss address: 0x{x}\n", .{tss_address});
-
-    log.info("kernel data segment selector: 0x{x}\n", .{@as(u16, @bitCast(kernel_data_segment_selector))});
-    log.info("kernel code segment selector: 0x{x}\n", .{@as(u16, @bitCast(kernel_code_segment_selector))});
-    log.info("user data segment selector: 0x{x}\n", .{@as(u16, @bitCast(user_data_segment_selector))});
-    log.info("user code segment selector: 0x{x}\n", .{@as(u16, @bitCast(user_code_segment_selector))});
-
     Gdt[5] = GdtEntry{
-        .limit1 = @truncate(tss_limit),
-        .base1 = @truncate(tss_address),
-        .base2 = @truncate(tss_address >> 16),
         .accessed = true,
         .rw = false,
         .direction_conforming = false,
         .executable = false,
         .descriptor_privilege_level = 0,
-        .limit2 = @truncate(tss_limit >> 16),
         .long_mode_code = false,
         .size = false,
         .granularity = false,
-        .base3 = @truncate(tss_limit >> 24),
         .descriptor_type = false,
     };
-    Gdt[5].set_base(tss_address);
+    Gdt[5].set_limit(@sizeOf(tss.TssIopb));
+    Gdt[5].set_base(@intFromPtr(&tss.tss_iopb));
     // this has a completely different format, see Intel SDM Vol 3. 8-6
-    Gdt[6] = @bitCast(tss_address >> 32);
+    Gdt[6] = @bitCast(@intFromPtr(&tss.tss_iopb) >> 32);
 
     GdtR.offset = @intFromPtr(&Gdt);
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
@@ -237,11 +224,14 @@ pub fn loadGdt() void {
     setDataSegmentRegisters(kernel_data_segment_selector);
     setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 
+    log.info("flushing tss\n", .{});
+
     flushTss(@bitCast(SegmentSelector{
         .requestor_privilege_level = 0,
         .selector_index = 5,
         .table_indicator = false,
     }));
+    log.info("flushed tss\n", .{});
 }
 
 extern fn lgdt(u64) callconv(.C) void;

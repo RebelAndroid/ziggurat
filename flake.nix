@@ -25,6 +25,7 @@
               parted
               gdb
               gptfdisk
+              bochs
             ];
           };
         }

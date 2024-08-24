@@ -30,7 +30,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .debug,
-    .logFn = serial_log.serial_log,
+    .logFn = framebuffer_log.framebuffer_log,
 };
 
 const log = std.log.scoped(.main);
@@ -111,6 +111,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     efer.no_execute_enable = true;
     msr.writeEfer(efer);
 
+    log.info("features: {}\n", .{cpuid.get_feature_information()});
+
     log.info("setting star\n", .{});
     msr.writeStar(msr.Star{
         .kernel_cs_selector = gdt.kernel_star_segment_selector,
@@ -129,6 +131,11 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
+    var apic_base = msr.readApicBase();
+    log.info("apic base: {}, addr: 0x{x}", .{ apic_base, apic_base.apic_base });
+    apic_base.enable_xapic = true;
+    apic_base.enable_x2apic = true;
+
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
@@ -144,13 +151,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
-
     log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
-
-    log.info("tss rsp0: 0x{x}\n", .{tss.tss_iopb.tss.rsp[0]});
-    log.info("tss address: 0x{x}\n", .{@intFromPtr(&tss.tss_iopb)});
-
-    _ = new_cr3.setFlags(.{ .four_kb = @bitCast(@intFromPtr(&tss.tss_iopb) & (~@as(u64, 0xFFF))) }, hhdm_offset, reg.PageFlags{ .user = true, .execute = false, .write = true });
 
     var init_process: process.Process = .{};
     init_process.rsp = 0x4000FF0;
