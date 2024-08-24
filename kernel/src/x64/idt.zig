@@ -76,8 +76,8 @@ export fn breakpointHandler() callconv(.Interrupt) void {
     log.info("breakpoint!\n", .{});
 }
 
-export fn generalProtectionHandler() callconv(.Interrupt) noreturn {
-    log.info("General Protection Fault!\n", .{});
+export fn generalProtectionHandler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
+    log.info("General Protection Fault! error code: 0x{x}\n", .{err});
     done();
 }
 

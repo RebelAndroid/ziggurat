@@ -448,3 +448,7 @@ comptime {
         \\  retq
     );
 }
+
+test "register sizes" {
+    try std.testing.expectEqual(64, @bitSizeOf(CR4));
+}

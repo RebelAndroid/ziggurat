@@ -3,7 +3,7 @@ const log = std.log.scoped(.gdt);
 const tss = @import("tss.zig");
 
 pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-pub var Gdt: [7]GdtEntry = std.mem.zeroes([7]GdtEntry);
+pub var Gdt: [11]GdtEntry = std.mem.zeroes([11]GdtEntry);
 
 pub const GdtDescriptor = packed struct {
     size: u16,
@@ -72,36 +72,42 @@ pub const SegmentSelector = packed struct {
 pub const kernel_star_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = 1,
+    .selector_index = 5,
 };
 
 pub const user_star_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = 2,
+    .selector_index = 6,
 };
 
 pub const kernel_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = kernel_star_segment_selector.selector_index,
+    .selector_index = kernel_star_segment_selector.selector_index, // 5
 };
 
 pub const kernel_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 0,
     .table_indicator = false,
-    .selector_index = kernel_star_segment_selector.selector_index + 1,
+    .selector_index = kernel_star_segment_selector.selector_index + 1, // 6
 };
 
 pub const user_data_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = user_star_segment_selector.selector_index + 1,
+    .selector_index = user_star_segment_selector.selector_index + 1, // 7
 };
 pub const user_code_segment_selector = SegmentSelector{
     .requestor_privilege_level = 3,
     .table_indicator = false,
-    .selector_index = user_star_segment_selector.selector_index + 2,
+    .selector_index = user_star_segment_selector.selector_index + 2, // 8
+};
+
+pub const tss_segment_selector = SegmentSelector{
+    .requestor_privilege_level = 0,
+    .table_indicator = false,
+    .selector_index = 2,
 };
 
 pub fn loadGdt() void {
@@ -200,21 +206,21 @@ pub fn loadGdt() void {
         .granularity = true,
     };
 
-    Gdt[5] = GdtEntry{
-        .accessed = true,
-        .rw = false,
-        .direction_conforming = false,
-        .executable = false,
-        .descriptor_privilege_level = 0,
-        .long_mode_code = false,
-        .size = false,
-        .granularity = false,
-        .descriptor_type = false,
+    const tss_base: u64 = @intFromPtr(&tss.tss_iopb);
+    log.info("tss base: 0x{x}\n", .{tss_base});
+    var tss_descriptor_bottom = tss.TssDescriptorBottom{
+        .avl = 1,
+        .typ = 9,
     };
-    Gdt[5].set_limit(@sizeOf(tss.TssIopb));
-    Gdt[5].set_base(@intFromPtr(&tss.tss_iopb));
-    // this has a completely different format, see Intel SDM Vol 3. 8-6
-    Gdt[6] = @bitCast(@intFromPtr(&tss.tss_iopb) >> 32);
+    tss_descriptor_bottom.set_base(tss_base);
+    tss_descriptor_bottom.set_limit(@sizeOf(tss.TssIopb));
+
+    const tss_descriptor_top = tss.TssDescriptorTop{
+        .base4 = @truncate(tss_base >> 32),
+    };
+
+    Gdt[tss_segment_selector.selector_index] = @bitCast(tss_descriptor_bottom);
+    Gdt[tss_segment_selector.selector_index + 1] = @bitCast(tss_descriptor_top);
 
     GdtR.offset = @intFromPtr(&Gdt);
     GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
@@ -226,11 +232,7 @@ pub fn loadGdt() void {
 
     log.info("flushing tss\n", .{});
 
-    flushTss(@bitCast(SegmentSelector{
-        .requestor_privilege_level = 0,
-        .selector_index = 5,
-        .table_indicator = false,
-    }));
+    flushTss(@bitCast(tss_segment_selector));
     log.info("flushed tss\n", .{});
 }
 
@@ -297,4 +299,10 @@ comptime {
         \\set_code_segment_register_2:
         \\  retq
     );
+}
+
+test "gdt sizes" {
+    try std.testing.expectEqual(16, @bitSizeOf(SegmentSelector));
+    try std.testing.expectEqual(64, @bitSizeOf(GdtEntry));
+    try std.testing.expectEqual(8, @sizeOf(GdtEntry));
 }

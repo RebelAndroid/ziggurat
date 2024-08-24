@@ -13,11 +13,10 @@ define DEFAULT_VAR =
     endif
 endef
 
-override DEFAULT_KZIGFLAGS := -Doptimize=ReleaseSmall
+override DEFAULT_KZIGFLAGS := -Doptimize=ReleaseSafe
 $(eval $(call DEFAULT_VAR,KZIGFLAGS,$(DEFAULT_KZIGFLAGS)))
 
-QEMU_FLAGS := -serial stdio -no-shutdown -no-reboot -d int
-
+QEMU_FLAGS := -serial stdio -no-shutdown -no-reboot -d int -enable-kvm
 .PHONY: all
 all: $(IMAGE_NAME).iso
 
@@ -45,7 +44,9 @@ run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 
 .PHONY: zig-test
 zig-test:
+	zig test kernel/src/x64/gdt.zig
 	zig test kernel/src/process.zig
+	zig test kernel/src/x64/registers.zig
 	zig test kernel/src/x64/xsave.zig
 	zig test kernel/src/x64/idt.zig
 	zig test kernel/src/x64/tss.zig

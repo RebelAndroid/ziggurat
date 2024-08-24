@@ -29,8 +29,8 @@ export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
-    .log_level = .debug,
-    .logFn = framebuffer_log.framebuffer_log,
+    .log_level = .info,
+    .logFn = serial_log.serial_log,
 };
 
 const log = std.log.scoped(.main);
@@ -82,6 +82,18 @@ export fn _start() callconv(.C) noreturn {
     done();
 }
 
+fn cause_page_fault() void {
+    _ = @as(*volatile u8, @ptrFromInt(1)).*;
+}
+
+fn cause_general_protection_fault() void {
+    log.info("causing general protection fault\n", .{});
+    var cr4 = reg.get_cr4();
+    log.info("cr4: {}\n", .{cr4});
+    cr4._2 = true;
+    reg.set_cr4(cr4);
+}
+
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
     var frame_allocator = pmm.FrameAllocator{
         .hhdm_offset = hhdm_offset,
@@ -99,10 +111,11 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset + 4080});
     tss.initTss(new_stack2 + hhdm_offset + 4080);
 
-    log.info("loading gdt\n", .{});
-    gdt.loadGdt();
     log.info("loading idt\n", .{});
     idt.loadIdt();
+
+    log.info("loading gdt\n", .{});
+    gdt.loadGdt();
 
     log.info("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
