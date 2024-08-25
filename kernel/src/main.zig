@@ -30,7 +30,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = serial_log.serial_log,
+    .logFn = framebuffer_log.framebuffer_log,
 };
 
 const log = std.log.scoped(.main);
@@ -108,7 +108,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     const new_stack2 = frame_allocator.allocate_frame();
     // add 4080 to go to the top of the page with 16 byte alignment
-    log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset + 4080});
+    // log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset + 4080});
     tss.initTss(new_stack2 + hhdm_offset + 4080);
 
     log.info("loading idt\n", .{});
@@ -124,7 +124,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     efer.no_execute_enable = true;
     msr.writeEfer(efer);
 
-    log.info("features: {}\n", .{cpuid.get_feature_information()});
+    // log.info("features: {}\n", .{cpuid.get_feature_information()});
 
     log.info("setting star\n", .{});
     msr.writeStar(msr.Star{
@@ -144,15 +144,15 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
-    var apic_base = msr.readApicBase();
-    log.info("apic base: {}, addr: 0x{x}", .{ apic_base, apic_base.apic_base });
-    apic_base.enable_xapic = true;
-    apic_base.enable_x2apic = true;
+    // var apic_base = msr.readApicBase();
+    // log.info("apic base: {}, addr: 0x{x}", .{ apic_base, apic_base.apic_base });
+    // apic_base.enable_xapic = true;
+    // apic_base.enable_x2apic = true;
 
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
-    log.info("entry point: 0x{x}\n", .{entry_point});
+    // log.info("entry point: 0x{x}\n", .{entry_point});
 
     log.info("creating user mode stack\n", .{});
     const user_stack = frame_allocator.allocate_frame();
@@ -164,7 +164,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
 
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
-    log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
+    // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
     var init_process: process.Process = .{};
     init_process.rsp = 0x4000FF0;
@@ -243,13 +243,13 @@ comptime {
         \\  movq $0, %r8
         \\  movq $0, %r9
         \\  movq $0, %r10
-        \\  swapgs
+        \\  swapgs # restore user mode gs
         \\  sti # enable interrupts
         \\  sysretq
     );
 }
 
 pub export fn syscall_handler(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) u64 {
-    log.info("Syscall!\n rdi: {}, rsi: {}, rdx: {}, rcx: {}, r8: {}, r9: {}\n", .{ rdi, rsi, rdx, rcx, r8, r9 });
+    log.info("Syscall!\n rdi: 0x{x}, rsi: 0x{x}, rdx: 0x{x}, rcx: 0x{x}, r8: 0x{}, r9: 0x{}\n", .{ rdi, rsi, rdx, rcx, r8, r9 });
     return 0;
 }

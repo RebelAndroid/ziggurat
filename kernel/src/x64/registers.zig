@@ -449,6 +449,28 @@ comptime {
     );
 }
 
+pub extern fn getDs() callconv(.C) u16;
+comptime {
+    asm (
+        \\.globl getDs
+        \\.type getDs @function
+        \\getDs:
+        \\  movw %ds, %ax
+        \\  retq
+    );
+}
+
+pub extern fn getCs() callconv(.C) u16;
+comptime {
+    asm (
+        \\.globl getCs
+        \\.type getCs @function
+        \\getCs:
+        \\  movw %cs, %ax
+        \\  retq
+    );
+}
+
 test "register sizes" {
     try std.testing.expectEqual(64, @bitSizeOf(CR4));
 }

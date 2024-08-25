@@ -1,5 +1,6 @@
 const std = @import("std");
 const gdt = @import("gdt.zig");
+const reg = @import("registers.zig");
 
 const log = std.log.scoped(.idt);
 
@@ -77,7 +78,13 @@ export fn breakpointHandler() callconv(.Interrupt) void {
 }
 
 export fn generalProtectionHandler(_: *u8, err: u64) callconv(.Interrupt) noreturn {
-    log.info("General Protection Fault! error code: 0x{x}\n", .{err});
+    if (err != 0) {
+        const segment_selector: gdt.SegmentSelector = @bitCast(@as(u16, @truncate(err)));
+        log.info("General Protection Fault! segment: 0x{x}, {}\n", .{ err, segment_selector });
+    } else {
+        log.info("General Protection Fault! not segment related\n", .{});
+    }
+
     done();
 }
 

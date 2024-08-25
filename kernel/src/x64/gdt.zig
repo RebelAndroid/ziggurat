@@ -3,7 +3,7 @@ const log = std.log.scoped(.gdt);
 const tss = @import("tss.zig");
 
 pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-pub var Gdt: [11]GdtEntry = std.mem.zeroes([11]GdtEntry);
+pub var Gdt: [9]GdtEntry = std.mem.zeroes([9]GdtEntry);
 
 pub const GdtDescriptor = packed struct {
     size: u16,
@@ -76,7 +76,7 @@ pub const kernel_star_segment_selector = SegmentSelector{
 };
 
 pub const user_star_segment_selector = SegmentSelector{
-    .requestor_privilege_level = 0,
+    .requestor_privilege_level = 3,
     .table_indicator = false,
     .selector_index = 6,
 };
@@ -230,10 +230,10 @@ pub fn loadGdt() void {
     setDataSegmentRegisters(kernel_data_segment_selector);
     setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 
-    log.info("flushing tss\n", .{});
+    log.debug("flushing tss\n", .{});
 
     flushTss(@bitCast(tss_segment_selector));
-    log.info("flushed tss\n", .{});
+    log.debug("flushed tss\n", .{});
 }
 
 extern fn lgdt(u64) callconv(.C) void;

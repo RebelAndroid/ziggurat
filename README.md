@@ -1,25 +1,13 @@
-# Limine Zig Template
+# Ziggurat
+Ziggurat is a work-in-progress kernel for x86-64 machines. Currently, it can load a static elf file and run it in userspace.
 
-This repository will demonstrate how to set up a basic x86-64 kernel in Zig using Limine.
+## Building
+Ziggurat uses Nix to manage the build environment. Enter the nix environment with `nix develop` or use enable direnv for the Ziggurat directory.
+Ziggurat uses make to build, use `make` with the appropriate target.
 
-## How to use this?
 
-### Dependencies
-
-Any `make` command depends on GNU make (`gmake`) and is expected to be run using it. This usually means using `make` on most GNU/Linux distros, or `gmake` on other non-GNU systems.
-
-All `make all*` targets depend on Zig, at least version 0.11.x.
-
-Additionally, building an ISO with `make all` requires `xorriso`, and building a HDD/USB image with `make all-hdd` requires `sgdisk` (usually from `gdisk` or `gptfdisk` packages) and `mtools`.
-
-### Makefile targets
-
-Running `make all` will compile the kernel (from the `kernel/` directory) and then generate a bootable ISO image.
-
-Running `make all-hdd` will compile the kernel and then generate a raw image suitable to be flashed onto a USB stick or hard drive/SSD.
-
-Running `make run` will build the kernel and a bootable ISO (equivalent to make all) and then run it using `qemu` (if installed).
-
-Running `make run-hdd` will build the kernel and a raw HDD image (equivalent to make all-hdd) and then run it using `qemu` (if installed).
-
-The `run-uefi` and `run-hdd-uefi` targets are equivalent to their non `-uefi` counterparts except that they boot `qemu` using a UEFI-compatible firmware.
+### Build targets
+- `ziggurat.iso` This target builds the ziggurat ISO image. This .iso can be used to boot on real hardware with `dd if=ziggurat.iso of=/dev/my_flash_drive_here`.
+- `run-kvm-uefi` This target creates a qemu virtual machine using kvm to run Ziggurat.
+- `run-gdb-uefi` This target creates a qemu virtual machine to run Ziggurat. The virtual machine waits for a connection from gdb before starting.
+- `run-uefi` This target creates a qemu virtual machine to run Ziggurat.

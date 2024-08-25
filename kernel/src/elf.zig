@@ -125,7 +125,7 @@ pub const SectionHeaderFlags = packed struct {
 
 pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, frame_allocator: *pmm.FrameAllocator) u64 {
     const header: *const Header = @ptrCast(file);
-    log.info("ELF header: {}\n", .{header});
+    log.debug("ELF header: {}\n", .{header});
     if (header.magic[0] != 0x7f or header.magic[1] != 'E' or header.magic[2] != 'L' or header.magic[3] != 'F') {
         log.err("init file is not an ELF! (invalid magic value)\n", .{});
     }
@@ -159,7 +159,7 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
     }
 
     for (program_header_table) |pheader| {
-        log.info("program header address: 0x{x} align: {} size: 0x{x} flags {} type: {} offset: 0x{x}\n", .{
+        log.debug("program header address: 0x{x} align: {} size: 0x{x} flags {} type: {} offset: 0x{x}\n", .{
             pheader.virtual_address,
             pheader.alignment,
             pheader.memory_size,
@@ -189,7 +189,7 @@ pub fn loadElf(file: []align(8) const u8, cr3: registers.CR3, hhdm_offset: u64, 
             });
         }
     }
-    log.info("entry point offset: 0x{x}\n", .{header.entry_point});
+    log.debug("entry point offset: 0x{x}\n", .{header.entry_point});
     return header.entry_point;
 }
 
