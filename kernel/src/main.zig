@@ -30,7 +30,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = framebuffer_log.framebuffer_log,
+    .logFn = serial_log.serial_log,
 };
 
 const log = std.log.scoped(.main);
@@ -144,10 +144,13 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
-    // var apic_base = msr.readApicBase();
-    // log.info("apic base: {}, addr: 0x{x}", .{ apic_base, apic_base.apic_base });
-    // apic_base.enable_xapic = true;
-    // apic_base.enable_x2apic = true;
+    log.info("features: {}\n", .{cpuid.get_feature_information()});
+
+    var apic_base = msr.readApicBase();
+    log.info("apic base: {}, addr: 0x{x}\n", .{ apic_base, apic_base.apic_base });
+    apic_base.enable_xapic = true;
+    apic_base.enable_x2apic = true;
+    msr.writeApicBase(apic_base);
 
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);

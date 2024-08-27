@@ -16,7 +16,7 @@ endef
 override DEFAULT_KZIGFLAGS := -Doptimize=ReleaseSafe
 $(eval $(call DEFAULT_VAR,KZIGFLAGS,$(DEFAULT_KZIGFLAGS)))
 
-QEMU_FLAGS := -serial stdio -no-shutdown -no-reboot -d int
+QEMU_FLAGS := -serial stdio -no-shutdown -no-reboot
 .PHONY: all
 all: $(IMAGE_NAME).iso
 
@@ -37,7 +37,7 @@ run-gdb-uefi: ovmf $(IMAGE_NAME).iso
 
 .PHONY: run-kvm-uefi
 run-kvm-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS) -enable-kvm	
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS) -enable-kvm	-cpu host
 	
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd
@@ -111,6 +111,7 @@ $(IMAGE_NAME).hdd: limine/limine kernel
 clean:
 	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd
 	rm -rf kernel/zig-cache kernel/.zig-cache kernel/zig-out
+	rm -rf init/zig-cache init/.zig-cache init/zig-out
 
 .PHONY: distclean
 distclean: clean
