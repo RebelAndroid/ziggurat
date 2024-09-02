@@ -14,6 +14,7 @@ const msr = @import("x64/msr.zig");
 const elf = @import("elf.zig");
 const process = @import("process.zig");
 const tss = @import("x64/tss.zig");
+const apic = @import("x64/apic.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -30,7 +31,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = serial_log.serial_log,
+    .logFn = framebuffer_log.framebuffer_log,
 };
 
 const log = std.log.scoped(.main);
@@ -117,14 +118,14 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("loading gdt\n", .{});
     gdt.loadGdt();
 
+    log.info("features: {} {}\n", .{ cpuid.get_feature_information(), cpuid.get_feature_information2() });
+
     log.info("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
     var efer: msr.Efer = msr.readEfer();
     efer.system_call_extensions = true;
     efer.no_execute_enable = true;
     msr.writeEfer(efer);
-
-    // log.info("features: {}\n", .{cpuid.get_feature_information()});
 
     log.info("setting star\n", .{});
     msr.writeStar(msr.Star{
@@ -141,16 +142,34 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
     const cr3 = reg.get_cr3();
-    const new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
+    var new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
     reg.set_cr3(@bitCast(new_cr3));
 
-    log.info("features: {}\n", .{cpuid.get_feature_information()});
+    log.info("initializing APIC\n", .{});
 
-    var apic_base = msr.readApicBase();
-    log.info("apic base: {}, addr: 0x{x}\n", .{ apic_base, apic_base.apic_base });
-    apic_base.enable_xapic = true;
-    apic_base.enable_x2apic = true;
-    msr.writeApicBase(apic_base);
+    apic.init(hhdm_offset, &new_cr3, &frame_allocator);
+
+    apic.write_spurious_interrupt(apic.SpuriousInterruptVectorRegister{
+        .vector = 0xFF,
+        .eoi_broadcast_supression = false,
+        .focus_processor_checking = false,
+        .apic_software_enable = true,
+    });
+
+    const timer = apic.Timer{
+        .vector = 0x31,
+        .delivery_status = false,
+        .mask = false,
+        .mode = apic.TimerMode.periodic,
+    };
+    apic.write_lvt_timer(timer);
+    // divide by 1
+    const divide_config = apic.DivideConfigurationRegister{
+        .divide1 = 0b11,
+        .divide2 = 1,
+    };
+    apic.write_divide_configuration(divide_config);
+    apic.write_initial_count(0x1000_0000);
 
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);

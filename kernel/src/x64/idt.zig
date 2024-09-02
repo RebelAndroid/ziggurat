@@ -1,6 +1,7 @@
 const std = @import("std");
 const gdt = @import("gdt.zig");
 const reg = @import("registers.zig");
+const apic = @import("apic.zig");
 
 const log = std.log.scoped(.idt);
 
@@ -93,6 +94,15 @@ export fn doubleFaultHandler() callconv(.Interrupt) noreturn {
     done();
 }
 
+export fn timer_handler() callconv(.Interrupt) void {
+    log.info("timer!\n", .{});
+    apic.write_eoi(0);
+}
+
+export fn spurious_interrupt_handler() callconv(.Interrupt) void {
+    log.info("spurious interrupt!\n", .{});
+}
+
 fn setIdtEntries() void {
     var breakpoint_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
@@ -126,11 +136,28 @@ fn setIdtEntries() void {
     };
     double_fault_entry.setOffset(@intFromPtr(&doubleFaultHandler));
 
+    var timer_entry: IdtEntry = .{
+        .segment_selector = gdt.kernel_code_segment_selector,
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    timer_entry.setOffset(@intFromPtr(&timer_handler));
+
+    var spurious_interrupt_entry: IdtEntry = .{
+        .segment_selector = gdt.kernel_code_segment_selector,
+        .ist = 0,
+        .gate_type = 0xF,
+        .dpl = 0,
+    };
+    spurious_interrupt_entry.setOffset(@intFromPtr(&spurious_interrupt_handler));
+
     IDT[3] = breakpoint_entry;
     IDT[8] = double_fault_entry;
     IDT[0xD] = genprot_entry;
     IDT[0xE] = page_fault_entry;
-    log.warn("page fault handler: 0x{x}\n", .{@intFromPtr(&pageFaultHandler)});
+    IDT[0x31] = timer_entry;
+    IDT[0xFF] = spurious_interrupt_entry;
 }
 
 pub fn loadIdt() void {

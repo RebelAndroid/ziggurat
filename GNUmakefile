@@ -49,6 +49,8 @@ run-hdd-uefi: ovmf $(IMAGE_NAME).hdd
 
 .PHONY: zig-test
 zig-test:
+	zig test kernel/src/x64/cpuid.zig
+	zig test kernel/src/x64/apic.zig
 	zig test kernel/src/x64/gdt.zig
 	zig test kernel/src/process.zig
 	zig test kernel/src/x64/registers.zig

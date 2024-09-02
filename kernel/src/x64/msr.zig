@@ -117,13 +117,52 @@ pub fn readApicBase() ApicBase {
     return @bitCast(readMsr(APIC_BASE_INDEX));
 }
 
-/// IA32_FMASK controls rflags
 pub fn writeApicBase(apic_base: ApicBase) void {
     writeMsr(APIC_BASE_INDEX, @bitCast(apic_base));
 }
+
+// const MTRRCAP_INDEX: u32 = 0xFE;
+// pub const MtrrCap = packed struct {
+//     /// The number of variable range registers available
+//     vcnt: u8,
+//     /// Set if fixed range registers are supported
+//     fix: bool,
+//     _1: bool,
+//     /// Set if write-combining memory type is supported
+//     wc: bool,
+//     /// Set if System-Management range register is supported
+//     smrr: bool,
+//     _2: u52,
+// };
+
+// pub fn readMtrrCap() MtrrCap {
+//     return @bitCast(readMsr(MTRRCAP_INDEX));
+// }
+
+// pub fn writeMtrrCap(mtrrCap: MtrrCap) void {
+//     writeMsr(MTRRCAP_INDEX, @bitCast(mtrrCap));
+// }
+
+// const MTRR_VAR_INDEX_BASE: u32 = 0x200;
+// /// Figure 12-7 in Intel SDM Vol 3a. 12-25
+// pub const MtrrPhysicalBase = packed struct {
+//     type: u8,
+//     _1: u4,
+//     base: u40,
+//     _2: u12,
+// };
+
+// /// Figure 12-7 in Intel SDM Vol 3a. 12-25
+// pub const MtrrPhysicalMask = packed struct {
+//     _1: u11,
+//     valid: bool,
+//     mask: u40,
+//     _2: u12,
+// };
 
 test "msr sizes" {
     try std.testing.expectEqual(64, @bitSizeOf(Efer));
     try std.testing.expectEqual(64, @bitSizeOf(Star));
     try std.testing.expectEqual(64, @bitSizeOf(ApicBase));
+    // try std.testing.expectEqual(64, @bitSizeOf(MtrrCap));
 }

@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const CpuidResult = packed struct {
     eax: u32 = 0,
     ebx: u32 = 0,
@@ -209,4 +211,53 @@ pub fn get_feature_information() FeatureInformationEcx {
     var x = CpuidResult{};
     get_cpuid(0x01, 0, &x);
     return @bitCast(x.ecx);
+}
+
+/// Table 3-11 in Intel SDM Vol 2A. 3-244
+const FeatureInformationEdx = packed struct {
+    fpu: bool,
+    vme: bool,
+    de: bool,
+    pse: bool,
+    tsc: bool,
+    msr: bool,
+    pae: bool,
+    mce: bool,
+    cx8: bool,
+    apic: bool,
+    _1: bool,
+    sep: bool,
+    /// set if Memory Type Range Registers are supported
+    mtrr: bool,
+    pge: bool,
+    mca: bool,
+    cmov: bool,
+    pat: bool,
+    pse36: bool,
+    psn: bool,
+    clflush: bool,
+    _2: bool,
+    debug_store: bool,
+    /// set if processor has MSRs to monitor temperature and control performance
+    acpi: bool,
+    mmx: bool,
+    fxsr: bool,
+    sse: bool,
+    sse2: bool,
+    ss: bool,
+    htt: bool,
+    tm: bool,
+    _3: bool,
+    pbe: bool,
+};
+
+pub fn get_feature_information2() FeatureInformationEdx {
+    var x = CpuidResult{};
+    get_cpuid(0x01, 0, &x);
+    return @bitCast(x.edx);
+}
+
+test "CPUID sizes" {
+    try std.testing.expectEqual(32, @bitSizeOf(FeatureInformationEcx));
+    try std.testing.expectEqual(32, @bitSizeOf(FeatureInformationEdx));
 }
