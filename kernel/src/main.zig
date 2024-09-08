@@ -188,11 +188,20 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     kernel_rsp = new_stack + hhdm_offset;
     // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
-    var init_process: process.Process = .{};
-    init_process.rsp = 0x4000FF0;
-    init_process.rflags = @bitCast(@as(u64, 0x202));
-    init_process.rip = entry_point;
-    init_process.cr3 = new_cr3;
+    var init_process: process.Process = .{
+        .cs = @as(u16, @bitCast(gdt.user_code_segment_selector)),
+        .ss = @as(u16, @bitCast(gdt.user_data_segment_selector)),
+        .rsp = 0x4000FF0,
+        .rflags = @bitCast(@as(u64, 0x202)),
+        .rip = entry_point,
+        .cr3 = new_cr3,
+        .rdi = 1,
+        .rsi = 2,
+        .rdx = 3,
+        .rcx = 4,
+        .r8 = 5,
+        .r9 = 6,
+    };
 
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(&init_process);
@@ -212,24 +221,27 @@ comptime {
         \\  movq %rax, %cr3
         \\  movq (%rdi), %rax
         \\  movq 8(%rdi), %rbx
-        \\  # can't set rcx
+        \\  movq 16(%rdi), %rcx
         \\  movq 24(%rdi), %rdx
         \\  movq 32(%rdi), %rsi
         \\  # can't set rdi yet
-        \\  movq 48(%rdi), %rsp
+        \\  # rsp will be popped off the stack by iret
         \\  movq 56(%rdi), %rbp
         \\  movq 64(%rdi), %r8
         \\  movq 72(%rdi), %r9
         \\  movq 80(%rdi), %r10
-        \\  # can't set r11
+        \\  movq 88(%rdi), %r11
         \\  movq 96(%rdi), %r12
         \\  movq 104(%rdi), %r13
         \\  movq 112(%rdi), %r14
         \\  movq 120(%rdi), %r15
-        \\  movq 128(%rdi), %rcx
-        \\  movq 136(%rdi), %r11
+        \\  pushq 160(%rdi) # ss
+        \\  pushq 48(%rdi) # rsp
+        \\  pushq 136(%rdi) # rflags
+        \\  pushq 152(%rdi) # cs
+        \\  pushq 128(%rdi) # rip
         \\  movq 40(%rdi), %rdi # we need to load rdi last because it is our pointer to the process struct
-        \\  sysretq
+        \\  iretq
     );
 }
 

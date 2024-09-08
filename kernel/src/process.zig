@@ -23,6 +23,8 @@ pub const Process = extern struct {
     rip: u64 = 0,
     rflags: registers.Rflags = @bitCast(@as(u64, 0)),
     cr3: registers.CR3 = @bitCast(@as(u64, 0)),
+    cs: u64,
+    ss: u64,
 };
 
 // these values must match the offsets used in jump_to_user_mode
@@ -32,4 +34,6 @@ test "jump to user mode offsets" {
     try std.testing.expectEqual(48, @offsetOf(Process, "rsp"));
     try std.testing.expectEqual(144, @offsetOf(Process, "cr3"));
     try std.testing.expectEqual(120, @offsetOf(Process, "r15"));
+    try std.testing.expectEqual(152, @offsetOf(Process, "cs"));
+    try std.testing.expectEqual(160, @offsetOf(Process, "ss"));
 }

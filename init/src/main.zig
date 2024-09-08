@@ -50,8 +50,8 @@ inline fn breakpoint() void {
     asm volatile ("int $3");
 }
 
-pub export fn _start() noreturn {
-    _ = syscall(getCs(), getDs(), getSs(), 4, 5, 6);
+pub export fn _start(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) noreturn {
+    _ = syscall(rdi, rsi, rdx, rcx, r8, r9);
     breakpoint();
     _ = syscall(7, 8, 9, 10, 11, 12);
     while (true) {}
