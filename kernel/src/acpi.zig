@@ -145,6 +145,88 @@ pub export fn AcpiOsRemoveInterruptHandler(interrupt_level: u32, handler: acpica
     return 1;
 }
 
+pub export fn AcpiOsGetTimer() u64 {
+    log.debug("AcpiOsGetTimer\n", .{});
+    return 0;
+}
+
+pub export fn AcpiOsPrintf(format: *const u8, ...) void {
+    log.debug("AcpiOsPrintf: {s}, {}\n", .{format});
+}
+
+pub export fn AcpiOsSignal(function: u32, info: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsSignal: {}, {}\n", .{ function, info });
+    return 0;
+}
+
+pub export fn AcpiOsReadMemory(physical_address: acpica.ACPI_PHYSICAL_ADDRESS, value: *u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadMemory: {}, {}, {}\n", .{ physical_address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsWriteMemory(physical_address: acpica.ACPI_PHYSICAL_ADDRESS, value: u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWriteMemory: {}, {}, {}\n", .{ physical_address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsWritePort(address: acpica.ACPI_IO_ADDRESS, value: u32, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWritePort: {}, {}, {}\n", .{ address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsCreateCache(cache_name: [*]u8, object_size: u16, max_depth: u16, return_cache: **acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsCreateCache: {}, {}, {}, {}\n", .{ cache_name, object_size, max_depth, return_cache });
+    return 0;
+}
+
+pub export fn AcpiOsDeleteCache(cache: *acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsDeleteCache {}\n", .{cache});
+    return 0;
+}
+
+pub export fn AcpiOsVprintf(format: [*]u8, va_list: std.builtin.VaList) void {
+    log.debug("AcpiOsVprintf {s}, {}\n", .{ format, va_list });
+}
+
+pub export fn AcpiOsWaitEventsComplete() void {
+    log.debug("AcpiOsWaitEventsComplete\n", .{});
+}
+
+pub export fn AcpiOsReadPciConfiguration(pci_id: acpica.ACPI_PCI_ID, register: u32, value: *u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadPciConfiguration: {}, {}, {}, {}\n", .{ pci_id, register, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsWritePciConfiguration(pci_id: acpica.ACPI_PCI_ID, register: u32, value: u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWritePciConfiguration: {}, {}, {}, {}\n", .{ pci_id, register, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsReadPort(address: acpica.ACPI_IO_ADDRESS, value: *u32, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadPort: {}, {}, {}\n", .{ address, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsAcquireObject(cache: acpica.ACPI_CACHE_T) ?*anyopaque {
+    log.debug("AcpiOsAcquireObject: {}\n", .{cache});
+    return null;
+}
+
+pub export fn AcpiOsReleaseObject(cache: acpica.ACPI_CACHE_T, object: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReleaseObject: {}, {}\n", .{ cache, object });
+    return 1;
+}
+
+pub export fn AcpiOsPurgeCache(cache: acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReleaseObject: {}\n", .{cache});
+    return 1;
+}
+
+pub export fn AcpiOsPhysicalTableOverride(existing_table: *acpica.ACPI_TABLE_HEADER, new_address: *acpica.ACPI_PHYSICAL_ADDRESS, new_table_length: *u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsPhysicalTableOverride: {}, {}, {}\n", .{ existing_table, new_address, new_table_length });
+    return 1;
+}
+
 pub const Xsdp = extern struct {
     signature: [8]u8,
     checksum: u8,

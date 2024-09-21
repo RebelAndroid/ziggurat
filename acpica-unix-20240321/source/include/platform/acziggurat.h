@@ -167,9 +167,10 @@
 
 /* Kernel specific ACPICA configuration */
 
-#ifdef CONFIG_ACPI_DEBUGGER
-    #define ACPI_DEBUGGER
-#endif
+// #ifdef CONFIG_ACPI_DEBUGGER
+//     #define ACPI_DEBUGGER
+// #endif
+
 
 #ifdef CONFIG_ACPI_DEBUG
     #define ACPI_MUTEX_DEBUG

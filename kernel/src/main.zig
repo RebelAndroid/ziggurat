@@ -33,7 +33,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = framebuffer_log.framebuffer_log,
+    .logFn = serial_log.serial_log,
 };
 
 const log = std.log.scoped(.main);
@@ -209,7 +209,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     };
 
     acpi.apica_test();
-    // _ = acpica.AcpiInitializeSubsystem();
+    _ = acpica.AcpiInitializeSubsystem();
 
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(&init_process);

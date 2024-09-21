@@ -33,7 +33,8 @@ pub fn build(b: *std.Build) !void {
     });
 
     // Add ACPICA.
-    const components = [_][]const u8{ "dispatcher", "events", "executer", "hardware", "parser", "namespace", "utilities", "tables", "resources" };
+    kernel.defineCMacro("ACPI_DEBUGGER", "");
+    const components = [_][]const u8{ "dispatcher", "events", "executer", "hardware", "parser", "namespace", "utilities", "tables", "resources", "debugger" };
     inline for (components) |component| {
         const c_src_dir = "../acpica-unix-20240321/source/components/" ++ component;
         const dir = try std.fs.cwd().openDir(c_src_dir, .{ .iterate = true });
@@ -44,6 +45,7 @@ pub fn build(b: *std.Build) !void {
             }
         }
     }
+
     kernel.addIncludePath(b.path("../acpica-unix-20240321/source/include"));
 
     kernel.root_module.addImport("limine", limine.module("limine"));
