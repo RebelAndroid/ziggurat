@@ -3,6 +3,230 @@ const acpica = @cImport(@cInclude("acpi.h"));
 
 const log = std.log.scoped(.acpi);
 
+pub export fn AcpiOsInitialize() acpica.ACPI_STATUS {
+    log.debug("AcpiOsInitialize\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsTerminate() acpica.ACPI_STATUS {
+    log.debug("AcpiOsTerminate\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsGetRootPointer() acpica.ACPI_PHYSICAL_ADDRESS {
+    log.debug("AcpiOsGetRootPointer\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsPredefinedOverride(predefined_object: *const acpica.acpi_predefined_names, new_value: *acpica.ACPI_STRING) acpica.ACPI_STATUS {
+    log.debug("AcpiOsPredefinedOverride: {}, {}\n", .{ predefined_object, new_value });
+    return 1;
+}
+
+pub export fn AcpiOsTableOverride(existing_table: *acpica.ACPI_TABLE_HEADER, new_table: **acpica.ACPI_TABLE_HEADER) acpica.ACPI_STATUS {
+    log.debug("AcpiOsTableOverride: {}, {}\n", .{ existing_table, new_table });
+    return 1;
+}
+
+pub export fn AcpiOsMapMemory(physical_address: acpica.ACPI_PHYSICAL_ADDRESS, length: acpica.ACPI_SIZE) ?*anyopaque {
+    log.debug("AcpiOsMapMemory: {}, {}\n", .{ physical_address, length });
+    return null;
+}
+
+pub export fn AcpiOsUnmapMemory(where: ?*anyopaque, length: acpica.ACPI_SIZE) void {
+    log.debug("AcpiOsUnmapMemory: {}, {}\n", .{ where, length });
+}
+
+pub export fn AcpiOsGetPhysicalAddress(logical_address: ?*anyopaque, physical_address: *acpica.ACPI_PHYSICAL_ADDRESS) acpica.ACPI_STATUS {
+    log.debug("AcpiOsGetPhysicalAddress: {}, {}\n", .{ logical_address, physical_address });
+    return 1;
+}
+
+pub export fn AcpiOsAllocate(size: acpica.ACPI_SIZE) ?*anyopaque {
+    log.debug("AcpiOsAllocate: {}\n", .{size});
+    return null;
+}
+
+pub export fn AcpiOsFree(memory: ?*anyopaque) void {
+    log.debug("AcpiOsAllocate: {}\n", .{memory});
+}
+
+pub export fn AcpiOsReadable(memory: ?*anyopaque, length: acpica.ACPI_SIZE) bool {
+    log.debug("AcpiOsReadable: {}, {}\n", .{ memory, length });
+    return false;
+}
+
+pub export fn AcpiOsWritable(memory: ?*anyopaque, length: acpica.ACPI_SIZE) bool {
+    log.debug("AcpiOsWritable: {}, {}\n", .{ memory, length });
+    return false;
+}
+
+pub export fn AcpiOsGetThreadId() acpica.ACPI_THREAD_ID {
+    log.debug("AcpiOsGetThreadId\n", .{});
+    return 0;
+}
+
+pub export fn AcpiOsExecute(typ: acpica.ACPI_EXECUTE_TYPE, function: acpica.ACPI_OSD_EXEC_CALLBACK, context: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsExecute: {}, {}, {}\n", .{ typ, function, context });
+    return 1;
+}
+
+pub export fn AcpiOsSleep(milliseconds: u64) void {
+    log.debug("AcpiOsSleep: {}\n", .{milliseconds});
+}
+
+pub export fn AcpiOsStall(microseconds: u32) void {
+    log.debug("AcpiOsStall: {}\n", .{microseconds});
+}
+
+pub export fn AcpiOsCreateMutex(out_handle: *acpica.ACPI_MUTEX) acpica.ACPI_STATUS {
+    log.debug("AcpiOsCreateMutex: {}\n", .{out_handle});
+    return 1;
+}
+
+pub export fn AcpiOsDeleteMutex(handle: acpica.ACPI_MUTEX) void {
+    log.debug("AcpiOsDelteMutex: {}\n", .{handle});
+}
+
+pub export fn AcpiOsAcquireMutex(handle: acpica.ACPI_MUTEX, timeout: u16) acpica.ACPI_STATUS {
+    log.debug("AcpiOsAcquireMutex: {}\n", .{ handle, timeout });
+    return 1;
+}
+
+pub export fn AcpiOsReleaseMutex(handle: acpica.ACPI_MUTEX) void {
+    log.debug("AcpiOsReleaseMutex: {}\n", .{handle});
+}
+
+pub export fn AcpiOsCreateSemaphore(max_uints: u32, initial_units: u32, out_handle: *acpica.ACPI_SEMAPHORE) acpica.ACPI_STATUS {
+    log.debug("AcpiOsCreateSemaphore: {}, {}, {}\n", .{ max_uints, initial_units, out_handle });
+    return 1;
+}
+
+pub export fn AcpiOsDeleteSemaphore(handle: acpica.ACPI_SEMAPHORE) acpica.ACPI_STATUS {
+    log.debug("AcpiOsDeleteSemaphore: {}\n", .{handle});
+    return 1;
+}
+
+pub export fn AcpiOsWaitSemaphore(handle: acpica.ACPI_SEMAPHORE, units: u32, timeout: u16) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWaitSemaphore: {}, {}, {}\n", .{ handle, units, timeout });
+    return 1;
+}
+
+pub export fn AcpiOsSignalSemaphore(handle: acpica.ACPI_SEMAPHORE, units: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsSignalSemaphore: {}\n", .{ handle, units });
+    return 1;
+}
+
+pub export fn AcpiOsCreateLock(out_handle: acpica.ACPI_SPINLOCK) acpica.ACPI_STATUS {
+    log.debug("AcpiOsCreateLock: {}\n", .{out_handle});
+    return 1;
+}
+
+pub export fn AcpiOsDeleteLock(handle: acpica.ACPI_HANDLE) void {
+    log.debug("AcpiOsDeleteLock: {}\n", .{handle});
+}
+
+pub export fn AcpiOsAcquireLock(handle: acpica.ACPI_SPINLOCK) acpica.ACPI_STATUS {
+    log.debug("AcpiOsAcquireLock: {}\n", .{handle});
+    return 1;
+}
+
+pub export fn AcpiOsReleaseLock(handle: acpica.ACPI_SPINLOCK, flags: acpica.ACPI_CPU_FLAGS) void {
+    log.debug("AcpiOsReleaseLock: {}, {}\n", .{ handle, flags });
+}
+
+pub export fn AcpiOsInstallInterruptHandler(interrupt_level: u32, handler: acpica.ACPI_OSD_HANDLER, context: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsInstallInterruptHandler: {}, {}, {}\n", .{ interrupt_level, handler, context });
+    return 1;
+}
+
+pub export fn AcpiOsRemoveInterruptHandler(interrupt_level: u32, handler: acpica.ACPI_OSD_HANDLER) acpica.ACPI_STATUS {
+    log.debug("AcpiOsRemoveInterruptHandler: {}, {}, {}\n", .{ interrupt_level, handler });
+    return 1;
+}
+
+pub export fn AcpiOsGetTimer() u64 {
+    log.debug("AcpiOsGetTimer\n", .{});
+    return 0;
+}
+
+pub export fn AcpiOsPrintf(format: *const u8, ...) void {
+    log.debug("AcpiOsPrintf: {s}, {}\n", .{format});
+}
+
+pub export fn AcpiOsSignal(function: u32, info: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsSignal: {}, {}\n", .{ function, info });
+    return 0;
+}
+
+pub export fn AcpiOsReadMemory(physical_address: acpica.ACPI_PHYSICAL_ADDRESS, value: *u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadMemory: {}, {}, {}\n", .{ physical_address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsWriteMemory(physical_address: acpica.ACPI_PHYSICAL_ADDRESS, value: u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWriteMemory: {}, {}, {}\n", .{ physical_address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsWritePort(address: acpica.ACPI_IO_ADDRESS, value: u32, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWritePort: {}, {}, {}\n", .{ address, value, width });
+    return 0;
+}
+
+pub export fn AcpiOsCreateCache(cache_name: [*]u8, object_size: u16, max_depth: u16, return_cache: **acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsCreateCache: {}, {}, {}, {}\n", .{ cache_name, object_size, max_depth, return_cache });
+    return 0;
+}
+
+pub export fn AcpiOsDeleteCache(cache: *acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsDeleteCache {}\n", .{cache});
+    return 0;
+}
+
+pub export fn AcpiOsVprintf(format: [*]u8, va_list: std.builtin.VaList) void {
+    log.debug("AcpiOsVprintf {s}, {}\n", .{ format, va_list });
+}
+
+pub export fn AcpiOsWaitEventsComplete() void {
+    log.debug("AcpiOsWaitEventsComplete\n", .{});
+}
+
+pub export fn AcpiOsReadPciConfiguration(pci_id: acpica.ACPI_PCI_ID, register: u32, value: *u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadPciConfiguration: {}, {}, {}, {}\n", .{ pci_id, register, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsWritePciConfiguration(pci_id: acpica.ACPI_PCI_ID, register: u32, value: u64, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsWritePciConfiguration: {}, {}, {}, {}\n", .{ pci_id, register, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsReadPort(address: acpica.ACPI_IO_ADDRESS, value: *u32, width: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReadPort: {}, {}, {}\n", .{ address, value, width });
+    return 1;
+}
+
+pub export fn AcpiOsAcquireObject(cache: acpica.ACPI_CACHE_T) ?*anyopaque {
+    log.debug("AcpiOsAcquireObject: {}\n", .{cache});
+    return null;
+}
+
+pub export fn AcpiOsReleaseObject(cache: acpica.ACPI_CACHE_T, object: ?*anyopaque) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReleaseObject: {}, {}\n", .{ cache, object });
+    return 1;
+}
+
+pub export fn AcpiOsPurgeCache(cache: acpica.ACPI_CACHE_T) acpica.ACPI_STATUS {
+    log.debug("AcpiOsReleaseObject: {}\n", .{cache});
+    return 1;
+}
+
+pub export fn AcpiOsPhysicalTableOverride(existing_table: *acpica.ACPI_TABLE_HEADER, new_address: *acpica.ACPI_PHYSICAL_ADDRESS, new_table_length: *u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsPhysicalTableOverride: {}, {}, {}\n", .{ existing_table, new_address, new_table_length });
+    return 1;
+}
+
 pub const Xsdp = extern struct {
     signature: [8]u8,
     checksum: u8,

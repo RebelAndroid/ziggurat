@@ -1,4 +1,5 @@
 const std = @import("std");
+const lock = @import("lock.zig");
 
 const log = std.log.scoped(.framebuffer);
 
@@ -37,10 +38,12 @@ pub const Context = struct {
     stride: u64 = 0,
     width: u64 = 0,
     height: u64 = 0,
+    lock: lock.Lock = .{},
 };
+
 pub const WriteError = error{};
-pub var framebuffer_writer: std.io.GenericWriter(Context, WriteError, framebuffer_print) = .{
-    .context = Context{},
+pub var framebuffer_writer: std.io.GenericWriter(*Context, WriteError, framebuffer_print) = .{
+    .context = &global_context,
 };
 
 pub const Color = struct { b: u8, g: u8, r: u8 };
@@ -50,7 +53,7 @@ pub const blue: Color = .{ .r = 0, .g = 0, .b = 255 };
 pub const green: Color = .{ .r = 0, .g = 255, .b = 0 };
 pub const black: Color = .{ .r = 0, .g = 0, .b = 0 };
 
-var context: Context = .{};
+var global_context: Context = .{};
 
 pub fn framebuffer_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_name = @tagName(scope);
@@ -65,7 +68,7 @@ pub fn init(framebuffer: [*]u8, stride: u64, width: u64, height: u64) void {
     const glyphs: []PackedGlyph = glyph_front[0..header.glyph_count];
     const bitmaps_front: [*]u8 = @ptrFromInt(@intFromPtr(glyph_front) + @sizeOf(PackedGlyph) * header.glyph_count);
     const bitmaps: []u8 = bitmaps_front[0..header.bitmaps_size];
-    context = .{
+    global_context = .{
         .glyphs = glyphs,
         .bitmaps = bitmaps,
         .header = header.*,
@@ -76,9 +79,12 @@ pub fn init(framebuffer: [*]u8, stride: u64, width: u64, height: u64) void {
         .width = width,
         .height = height,
     };
+    global_context.lock.lock();
 }
 
-pub fn framebuffer_print(_: Context, text: []const u8) WriteError!usize {
+pub fn framebuffer_print(context: *Context, text: []const u8) WriteError!usize {
+    // context.lock.lock();
+    // defer context.lock.unlock();
     for (text) |char| {
         if (char == '\n') {
             context.x = 4;

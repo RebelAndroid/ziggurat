@@ -15,6 +15,7 @@ const elf = @import("elf.zig");
 const process = @import("process.zig");
 const tss = @import("x64/tss.zig");
 const apic = @import("x64/apic.zig");
+const acpica = @cImport(@cInclude("acpi.h"));
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -24,6 +25,7 @@ export var hhdm_request: limine.HhdmRequest = .{};
 export var memory_map_request: limine.MemoryMapRequest = .{};
 export var rsdp_request: limine.RsdpRequest = .{};
 export var stack_size_request: limine.StackSizeRequest = .{ .stack_size = 4096 * 16 };
+export var smp_request: limine.SmpRequest = .{};
 
 export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
@@ -31,7 +33,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = framebuffer_log.framebuffer_log,
+    .logFn = serial_log.serial_log,
 };
 
 const log = std.log.scoped(.main);
@@ -69,30 +71,36 @@ export fn _start() callconv(.C) noreturn {
         // Get the first framebuffer's information.
         const framebuffer = framebuffer_response.framebuffers()[0];
         framebuffer_log.init(framebuffer.address, framebuffer.pitch, framebuffer.width, framebuffer.height);
-        if (hhdm_request.response) |hhdm_response| {
-            if (memory_map_request.response) |memory_map_response| {
-                if (rsdp_request.response) |rsdp_response| {
-                    const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
-                    main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)), framebuffer);
-                }
-            }
-        }
+
+        // Unwrap information from Limine
+        const hhdm_response: *limine.HhdmResponse = hhdm_request.response orelse {
+            log.err("Did not receive hhdm response from bootloader!", .{});
+            done();
+        };
+
+        const memory_map_response: *limine.MemoryMapResponse = memory_map_request.response orelse {
+            log.err("Did not receive memory map response from bootloader!", .{});
+            done();
+        };
+
+        const rsdp_response: *limine.RsdpResponse = rsdp_request.response orelse {
+            log.err("Did not receive rsdp response from bootloader!", .{});
+            done();
+        };
+
+        const smp_response: *limine.SmpResponse = smp_request.response orelse {
+            log.err("Did not receive smp response from bootloader!", .{});
+            done();
+        };
+
+        log.info("number of processors: {}\n", .{smp_response.cpu_count});
+
+        const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
+        main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)), framebuffer);
     }
 
     // We're done, just hang...
     done();
-}
-
-fn cause_page_fault() void {
-    _ = @as(*volatile u8, @ptrFromInt(1)).*;
-}
-
-fn cause_general_protection_fault() void {
-    log.info("causing general protection fault\n", .{});
-    var cr4 = reg.get_cr4();
-    log.info("cr4: {}\n", .{cr4});
-    cr4._2 = true;
-    reg.set_cr4(cr4);
 }
 
 fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
@@ -108,9 +116,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     }
 
     const new_stack2 = frame_allocator.allocate_frame();
-    // add 4080 to go to the top of the page with 16 byte alignment
-    // log.info("tss rsp0: 0x{x}\n", .{new_stack2 + hhdm_offset + 4080});
-    tss.initTss(new_stack2 + hhdm_offset + 4080);
+    // add 4096 to go to the top of the page
+    tss.initTss(new_stack2 + hhdm_offset + 4096);
 
     log.info("loading idt\n", .{});
     idt.loadIdt();
@@ -174,8 +181,6 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("loading elf\n", .{});
     const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
 
-    // log.info("entry point: 0x{x}\n", .{entry_point});
-
     log.info("creating user mode stack\n", .{});
     const user_stack = frame_allocator.allocate_frame();
     new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, hhdm_offset, &frame_allocator, .{
@@ -205,10 +210,12 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         .r9 = 6,
     };
 
+    acpi.apica_test();
+    _ = acpica.AcpiInitializeSubsystem();
+
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(&init_process);
 
-    // acpi.apica_test();
     log.info("done\n", .{});
     done();
 }
