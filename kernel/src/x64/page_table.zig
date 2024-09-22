@@ -253,6 +253,12 @@ pub const VirtualAddress = packed struct {
     directory_pointer: u9,
     pml4: u9,
     sign_extension: u16,
+    pub fn asU64(self: VirtualAddress) u64 {
+        return @bitCast(self);
+    }
+    pub fn isHigherHalf(self: VirtualAddress) bool {
+        return pml4 >= 256;
+    }
 };
 
 pub const PageType = enum {

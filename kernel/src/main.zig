@@ -184,6 +184,8 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
         .user = true,
     }) catch unreachable;
 
+    _ = new_cr3.translate(@bitCast(@as(u64, 0x4000000)), hhdm_offset);
+
     const new_stack = frame_allocator.allocate_frame();
     kernel_rsp = new_stack + hhdm_offset;
     // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
