@@ -9,6 +9,11 @@ pub const PageFlags = struct {
     user: bool,
 };
 
+pub const TranslationResult = struct {
+    physical_address: u64,
+    flags: PageFlags,
+};
+
 pub const CR3 = packed struct {
     _1: u3 = 0,
     pwt: u1,
@@ -18,41 +23,113 @@ pub const CR3 = packed struct {
     pub fn get_pml4(self: CR3) u64 {
         return @as(u64, self.pml4) << 12;
     }
-    pub fn translate(self: CR3, addr: page_table.VirtualAddress, hhdm_offset: u64) u64 {
+    pub fn translate(self: CR3, addr: page_table.VirtualAddress, hhdm_offset: u64) ?TranslationResult {
+        var res = TranslationResult{
+            .flags = PageFlags{
+                .write = true,
+                .execute = true,
+                .user = true,
+            }
+            .physical_address = 0;
+        };
+
         const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
         const pml4e = pml4[addr.pml4];
         if (!pml4e.present) {
-            return 1;
+            return null;
+        }
+
+        if(!pml4e.read_write) {
+            res.flags.write = false;
+        }
+        if(pml4e.execute_disable) {
+            res.flags.execute = false;
+        }
+        if(!pml4e.user) {
+            user = false;
         }
 
         log.debug("using page directory pointer table at: 0x{x}\n", .{pml4e.getPdpt()});
         const pdpt: *page_table.Pdpt = @ptrFromInt(pml4e.getPdpt() + hhdm_offset);
         const pdpte = pdpt[addr.directory_pointer];
         if (!pdpte.huge_page.present) {
-            return 2;
+            return null;
+        }
+        
+        // the pdpte may not map a huge page, but this is fine because relevant bits are in the same position
+        if(!pdpte.huge_page.read_write) {
+            res.flags.write = false;
+        }
+        if(pdpte.huge_page.execute_disable) {
+            res.flags.execute = false;
+        }
+        if(!pdpte.huge_page.user) {
+            user = false;
         }
         if (pdpte.isHugePage()) {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
-            return (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+            res.physical_address =  (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+            return res;
         } else {
             log.debug("using page directory at: 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
             const pd: *page_table.Pd = @ptrFromInt(pdpte.page_directory.getPageDirectory() + hhdm_offset);
             const pde = pd[addr.directory];
+
             if (!pde.huge_page.present) {
-                return 3;
+                return null;
             }
+
+            // the pd may not map a huge page, but this is fine because relevant bits are in the same position
+            if(!pde.huge_page.read_write) {
+                res.flags.write = false;
+            }
+            if(pde.huge_page.execute_disable) {
+                res.flags.execute = false;
+            }
+            if(!pde.huge_page.user) {
+                user = false;
+            }
+
             if (pde.isHugePage()) {
-                return (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+                res.physical_address = (@as(u64, pde.huge_page.page) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+                return res;
             } else {
                 log.debug("using page table at: 0x{x}\n", .{pde.page_table.getPageTable()});
                 const pt: *page_table.Pt = @ptrFromInt(pde.page_table.getPageTable() + hhdm_offset);
                 const pte = pt[addr.table];
                 if (!pte.present) {
-                    return 4;
+                    return null;
                 }
-                return (@as(u64, pte.page) << 12) + addr.page_offset;
+
+                if(!pte.read_write) {
+                    res.flags.write = false;
+                }
+                if(pte.execute_disable) {
+                    res.flags.execute = false;
+                }
+                if(!pte.user) {
+                    user = false;
+                }
+                res.physical_address = (@as(u64, pte.page) << 12) + addr.page_offset;
+                return res;
             }
         }
+    }
+
+    pub fn check_flags(self: CR3, start: page_table.VirtualAddress, hhdm_offset: u64, length: u64, flags: PageFlags) bool {
+        var start_page = start;
+        start_page.page_offset = 0;
+        // TODO: handle overflow
+        var end_page = @bitCast(start.asU64() + length - 1);
+        end_page.page_offset = 0;
+        while(start_page != end_page) : (start_page = @bitCast(start_page.asU64() += 0x1000)){
+            if (self.translate(start_page, hhdm_offset)) |res| {
+                if((flags.write && !res.flags.write) || (flags.execute && !res.flags.execute) || (flags.user && !res.flags.user)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     extern fn invalidatePage(address: u64) callconv(.C) void;
