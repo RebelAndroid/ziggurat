@@ -103,7 +103,8 @@ export fn spurious_interrupt_handler() callconv(.Interrupt) void {
     log.info("spurious interrupt!\n", .{});
 }
 
-fn setIdtEntries() void {
+/// Writes the IDT into memory. This function should be called once.
+pub fn writeIdt() void {
     var breakpoint_entry: IdtEntry = .{
         .segment_selector = gdt.kernel_code_segment_selector,
         .ist = 0,
@@ -160,8 +161,8 @@ fn setIdtEntries() void {
     IDT[0xFF] = spurious_interrupt_entry;
 }
 
+/// Loads the IDT into the IDT descriptor register. This function should be called once per CPU.
 pub fn loadIdt() void {
-    setIdtEntries();
     IdtR.size = @sizeOf(@TypeOf(IDT)) - 1;
     IdtR.offset = @intFromPtr(&IDT);
     const x = @intFromPtr(&IdtR);

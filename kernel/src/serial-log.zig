@@ -1,10 +1,16 @@
 const std = @import("std");
+const lock = @import("lock.zig");
 
-const Context = struct {};
+const Context = struct {
+    mutex: lock.Lock = .{},
+};
+
+var global_context = Context{};
+
 const WriteError = error{};
 
-const serial_writer: std.io.GenericWriter(Context, WriteError, serial_print) = .{
-    .context = Context{},
+const serial_writer: std.io.GenericWriter(*Context, WriteError, serial_print) = .{
+    .context = &global_context,
 };
 
 pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
@@ -17,14 +23,15 @@ pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLi
         .elf => @intFromEnum(level) <= @intFromEnum(std.log.Level.warn),
         else => true,
     };
-    // const b = true;
     if (b) {
+        global_context.mutex.lock();
         try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
         try serial_writer.print(format, args);
+        global_context.mutex.unlock();
     }
 }
 
-fn serial_print(_: Context, text: []const u8) WriteError!usize {
+fn serial_print(_: *Context, text: []const u8) WriteError!usize {
     for (text) |b| {
         out_byte(0x03F8, b);
     }
@@ -39,6 +46,7 @@ fn out_byte(port: u16, data: u8) void {
     );
 }
 
+/// Initializes the serial port. Must be called once.
 pub fn init() void {
     const port: u16 = 0x3f8; // base IO port for the serial port
     out_byte(port + 1, 0x00); // disable interrupts

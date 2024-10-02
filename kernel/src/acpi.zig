@@ -227,6 +227,31 @@ pub export fn AcpiOsPhysicalTableOverride(existing_table: *acpica.ACPI_TABLE_HEA
     return 1;
 }
 
+pub export fn AcpiOsEnterSleep(sleep_state: u8, rega_value: u32, regb_value: u32) acpica.ACPI_STATUS {
+    log.debug("AcpiOsEnterSleep: {}, {}, {}\n", .{ sleep_state, rega_value, regb_value });
+    return 1;
+}
+
+pub export fn AcpiOsWaitCommandReady() acpica.ACPI_STATUS {
+    log.debug("AcpiOsEnterSleep\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsNotifyCommandComplete() acpica.ACPI_STATUS {
+    log.debug("AcpiOsNotifyCommandComplete\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsInitializeDebugger() acpica.ACPI_STATUS {
+    log.debug("AcpiOsInitializeDebugger\n", .{});
+    return 1;
+}
+
+pub export fn AcpiOsTerminateDebugger() acpica.ACPI_STATUS {
+    log.debug("AcpiOsTerminateDebugger\n", .{});
+    return 1;
+}
+
 pub const Xsdp = extern struct {
     signature: [8]u8,
     checksum: u8,

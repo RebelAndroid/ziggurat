@@ -16,6 +16,7 @@ const process = @import("process.zig");
 const tss = @import("x64/tss.zig");
 const apic = @import("x64/apic.zig");
 const acpica = @cImport(@cInclude("acpi.h"));
+const lock = @import("lock.zig");
 
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
@@ -53,6 +54,25 @@ pub fn panic(message: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noretu
     done();
 }
 
+pub var global_state: ?GlobalState = null;
+
+pub const GlobalState = struct {
+    hhdm_offset: u64,
+    frame_allocator: lock.Mutex(pmm.FrameAllocator),
+};
+
+pub const ThreadLocalState = struct {
+    gdt: gdt.Gdt,
+    tss: tss.TssIopb,
+    gdtr: gdt.GdtDescriptor,
+    syscall_rsp: u64,
+    interrupt_rsp: u64,
+};
+
+const max_threads = 2;
+
+pub var thread_local_states: [max_threads]ThreadLocalState = std.mem.zeroes([max_threads]ThreadLocalState);
+
 // The following will be our kernel's entry point.
 export fn _start() callconv(.C) noreturn {
     // Ensure the bootloader actually understands our base revision (see spec).
@@ -83,10 +103,10 @@ export fn _start() callconv(.C) noreturn {
             done();
         };
 
-        const rsdp_response: *limine.RsdpResponse = rsdp_request.response orelse {
-            log.err("Did not receive rsdp response from bootloader!", .{});
-            done();
-        };
+        // const rsdp_response: *limine.RsdpResponse = rsdp_request.response orelse {
+        //     log.err("Did not receive rsdp response from bootloader!", .{});
+        //     done();
+        // };
 
         const smp_response: *limine.SmpResponse = smp_request.response orelse {
             log.err("Did not receive smp response from bootloader!", .{});
@@ -95,37 +115,47 @@ export fn _start() callconv(.C) noreturn {
 
         log.info("number of processors: {}\n", .{smp_response.cpu_count});
 
-        const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
-        main(hhdm_response.offset, entries, @alignCast(@ptrCast(rsdp_response.address)), framebuffer);
+        global_state = .{
+            .hhdm_offset = hhdm_response.offset,
+            .frame_allocator = lock.Mutex(pmm.FrameAllocator).new(.{
+                .hhdm_offset = hhdm_response.offset,
+            }),
+        };
+
+        var frame_allocator = global_state.?.frame_allocator.get();
+        for (memory_map_response.entries()) |e| {
+            if (e.kind != limine.MemoryMapEntryType.usable) {
+                continue;
+            }
+            frame_allocator.free_frames(e.base, e.length / 0x1000);
+        }
+        global_state.?.frame_allocator.release();
+
+        // write the IDT, it is shared between all threads
+        idt.writeIdt();
+        // const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
+        main(&thread_local_states[0]);
     }
 
     // We're done, just hang...
     done();
 }
 
-fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi.Xsdp, _: *limine.Framebuffer) noreturn {
-    var frame_allocator = pmm.FrameAllocator{
-        .hhdm_offset = hhdm_offset,
-    };
-
-    for (memory_map_entries) |e| {
-        if (e.kind != limine.MemoryMapEntryType.usable) {
-            continue;
-        }
-        frame_allocator.free_frames(e.base, e.length / 0x1000);
-    }
-
-    const new_stack2 = frame_allocator.allocate_frame();
-    // add 4096 to go to the top of the page
-    tss.initTss(new_stack2 + hhdm_offset + 4096);
-
+fn main(tls: *ThreadLocalState) noreturn {
+    // assert that GlobalState has been created
+    var globals: *GlobalState = &(global_state orelse unreachable);
     log.info("loading idt\n", .{});
+    log.info("IDT at: 0x{x}\n", .{@intFromPtr(&idt.IDT)});
     idt.loadIdt();
+    const new_stack2 = globals.frame_allocator.get().allocate_frame();
+    globals.frame_allocator.release();
+    // add 4096 to go to the top of the page
+    log.info("writing gdt\n", .{});
+    tss.writeTss(&tls.tss, new_stack2 + globals.hhdm_offset + 4096);
+    gdt.writeGdt(&tls.gdt, &tls.tss);
 
-    log.info("loading gdt\n", .{});
-    gdt.loadGdt();
-
-    log.info("features: {} {}\n", .{ cpuid.get_feature_information(), cpuid.get_feature_information2() });
+    log.info("loading gdt at 0x{x}\n", .{@intFromPtr(&tls.gdt)});
+    gdt.loadGdt(&tls.gdtr, &tls.gdt);
 
     log.info("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
@@ -149,12 +179,14 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     log.info("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
     const cr3 = reg.get_cr3();
-    var new_cr3 = cr3.copy(hhdm_offset, &frame_allocator);
+    var new_cr3 = cr3.copy(globals.hhdm_offset, globals.frame_allocator.get());
+    globals.frame_allocator.release();
     reg.set_cr3(@bitCast(new_cr3));
 
     log.info("initializing APIC\n", .{});
 
-    apic.init(hhdm_offset, &new_cr3, &frame_allocator);
+    apic.init(globals.hhdm_offset, &new_cr3, globals.frame_allocator.get());
+    globals.frame_allocator.release();
 
     apic.write_spurious_interrupt(apic.SpuriousInterruptVectorRegister{
         .vector = 0xFF,
@@ -179,18 +211,22 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     apic.write_initial_count(0x1000_0000);
 
     log.info("loading elf\n", .{});
-    const entry_point = elf.loadElf(&init_file, new_cr3, hhdm_offset, &frame_allocator);
+    const entry_point = elf.loadElf(&init_file, new_cr3, globals.hhdm_offset, globals.frame_allocator.get());
+    globals.frame_allocator.release();
 
     log.info("creating user mode stack\n", .{});
-    const user_stack = frame_allocator.allocate_frame();
-    new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, hhdm_offset, &frame_allocator, .{
+    const user_stack = globals.frame_allocator.get().allocate_frame();
+    globals.frame_allocator.release();
+    new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, globals.hhdm_offset, globals.frame_allocator.get(), .{
         .execute = false,
         .write = true,
         .user = true,
     }) catch unreachable;
+    globals.frame_allocator.release();
 
-    const new_stack = frame_allocator.allocate_frame();
-    kernel_rsp = new_stack + hhdm_offset;
+    const new_stack = globals.frame_allocator.get().allocate_frame();
+    globals.frame_allocator.release();
+    kernel_rsp = new_stack + globals.hhdm_offset;
     // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
     var init_process: process.Process = .{
@@ -209,7 +245,7 @@ fn main(hhdm_offset: u64, memory_map_entries: []*limine.MemoryMapEntry, _: *acpi
     };
 
     acpi.apica_test();
-    _ = acpica.AcpiInitializeSubsystem();
+    // _ = acpica.AcpiInitializeSubsystem();
 
     log.info("jumping to user mode\n", .{});
     jump_to_user_mode(&init_process);

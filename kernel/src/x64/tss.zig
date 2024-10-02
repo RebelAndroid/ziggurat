@@ -45,9 +45,7 @@ pub const TssDescriptorTop = packed struct {
     _1: u32 = 0,
 };
 
-pub var tss_iopb: TssIopb align(4096) = TssIopb{};
-
-pub fn initTss(kernel_stack: u64) void {
+pub fn writeTss(tss_iopb: *TssIopb, kernel_stack: u64) void {
     tss_iopb.tss.rsp[0] = kernel_stack;
     tss_iopb.tss.iopb = 104; // the iopb immediately follows the tss
 }

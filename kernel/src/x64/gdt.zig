@@ -2,12 +2,11 @@ const std = @import("std");
 const log = std.log.scoped(.gdt);
 const tss = @import("tss.zig");
 
-pub var GdtR: GdtDescriptor = std.mem.zeroes(GdtDescriptor);
-pub var Gdt: [9]GdtEntry = std.mem.zeroes([9]GdtEntry);
+pub const Gdt: type = [9]GdtEntry;
 
-pub const GdtDescriptor = packed struct {
+pub const GdtDescriptor = extern struct {
     size: u16,
-    offset: u64,
+    offset: u64 align(2),
     pub fn get_entries(self: GdtDescriptor) []GdtEntry {
         const start: [*]GdtEntry = @ptrFromInt(self.offset);
         const length = @divExact(@as(u64, self.size) + 1, 8);
@@ -110,13 +109,14 @@ pub const tss_segment_selector = SegmentSelector{
     .selector_index = 2,
 };
 
-pub fn loadGdt() void {
+/// Creates the GDT in memory. This function should be called once.
+pub fn writeGdt(gdt: *Gdt, tss_ptr: *tss.TssIopb) void {
     // The first gdt entry is always a null descriptor
-    Gdt[0] = std.mem.zeroes(GdtEntry);
+    gdt[0] = std.mem.zeroes(GdtEntry);
 
     // The second entry will be the kernel data segment
     // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
-    Gdt[kernel_data_segment_selector.selector_index] = GdtEntry{
+    gdt[kernel_data_segment_selector.selector_index] = GdtEntry{
         // SS.Base := 0, default base
         // SS.Limit := 0xFFFFF, default limit
         // SS.Type := 3
@@ -139,7 +139,7 @@ pub fn loadGdt() void {
 
     // The third entry will be the kernel code segment
     // This segment must match what is required by SYSCALL, see intel software developers manual Vol 2B 4-695 - 4-496
-    Gdt[kernel_code_segment_selector.selector_index] = GdtEntry{
+    gdt[kernel_code_segment_selector.selector_index] = GdtEntry{
         // CS.Base := 0, default base
         // CS.Limit := 0xFFFFF, default limit
         // CS.TYPE := 11
@@ -162,7 +162,7 @@ pub fn loadGdt() void {
 
     // The fourth entry will be the user data segment
     // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
-    Gdt[user_data_segment_selector.selector_index] = GdtEntry{
+    gdt[user_data_segment_selector.selector_index] = GdtEntry{
         // SS.Base := 0, default base
         // SS.Limit := 0xFFFFF, default limit
         // SS.Type := 3
@@ -185,7 +185,7 @@ pub fn loadGdt() void {
 
     // The fifth entry will be the user code segment
     // This segment must match what is required by SYSRET, see intel software developers manual Vol 2B 4-705 - 4-706
-    Gdt[user_code_segment_selector.selector_index] = GdtEntry{
+    gdt[user_code_segment_selector.selector_index] = GdtEntry{
         // CS.Base := 0, default base
         // CS.Limit := 0xFFFFF, default limit
         // CS.Type := 11
@@ -206,8 +206,8 @@ pub fn loadGdt() void {
         .granularity = true,
     };
 
-    const tss_base: u64 = @intFromPtr(&tss.tss_iopb);
-    log.info("tss base: 0x{x}\n", .{tss_base});
+    // now we load the TSS
+    const tss_base: u64 = @intFromPtr(tss_ptr);
     var tss_descriptor_bottom = tss.TssDescriptorBottom{
         .avl = 1,
         .typ = 9,
@@ -219,21 +219,25 @@ pub fn loadGdt() void {
         .base4 = @truncate(tss_base >> 32),
     };
 
-    Gdt[tss_segment_selector.selector_index] = @bitCast(tss_descriptor_bottom);
-    Gdt[tss_segment_selector.selector_index + 1] = @bitCast(tss_descriptor_top);
+    gdt[tss_segment_selector.selector_index] = @bitCast(tss_descriptor_bottom);
+    gdt[tss_segment_selector.selector_index + 1] = @bitCast(tss_descriptor_top);
+}
 
-    GdtR.offset = @intFromPtr(&Gdt);
-    GdtR.size = @sizeOf(@TypeOf(Gdt)) - 1;
-    const x = @intFromPtr(&GdtR);
+/// Loads the gdt into the gdt descriptor register. This function should be called once on every CPU.
+pub fn loadGdt(gdtr: *volatile GdtDescriptor, gdt: *Gdt) void {
+    gdtr.offset = @intFromPtr(gdt);
+    gdtr.size = @sizeOf(Gdt) - 1;
+    const x = @intFromPtr(gdtr);
+    log.info("loading gdtr at 0x{x}\n", .{x});
+    log.info("size: 0x{x}, offset: 0x{x}\n", .{ gdtr.size, gdtr.offset });
     lgdt(x);
 
     setDataSegmentRegisters(kernel_data_segment_selector);
     setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 
-    log.debug("flushing tss\n", .{});
-
+    log.info("flushing tss\n", .{});
     flushTss(@bitCast(tss_segment_selector));
-    log.debug("flushed tss\n", .{});
+    log.info("flushed tss\n", .{});
 }
 
 extern fn lgdt(u64) callconv(.C) void;
@@ -305,4 +309,7 @@ test "gdt sizes" {
     try std.testing.expectEqual(16, @bitSizeOf(SegmentSelector));
     try std.testing.expectEqual(64, @bitSizeOf(GdtEntry));
     try std.testing.expectEqual(8, @sizeOf(GdtEntry));
+    try std.testing.expectEqual(10, @sizeOf(GdtDescriptor));
+    try std.testing.expectEqual(0, @offsetOf(GdtDescriptor, "size"));
+    try std.testing.expectEqual(2, @offsetOf(GdtDescriptor, "offset"));
 }
