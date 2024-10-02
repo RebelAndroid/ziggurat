@@ -29,8 +29,8 @@ pub const CR3 = packed struct {
                 .write = true,
                 .execute = true,
                 .user = true,
-            }
-            .physical_address = 0;
+            },
+            .physical_address = 0,
         };
 
         const pml4: *page_table.PML4 = @ptrFromInt(self.get_pml4() + hhdm_offset);
@@ -39,14 +39,14 @@ pub const CR3 = packed struct {
             return null;
         }
 
-        if(!pml4e.read_write) {
+        if (!pml4e.read_write) {
             res.flags.write = false;
         }
-        if(pml4e.execute_disable) {
+        if (pml4e.execute_disable) {
             res.flags.execute = false;
         }
-        if(!pml4e.user) {
-            user = false;
+        if (!pml4e.user) {
+            res.flags.user = false;
         }
 
         log.debug("using page directory pointer table at: 0x{x}\n", .{pml4e.getPdpt()});
@@ -55,20 +55,20 @@ pub const CR3 = packed struct {
         if (!pdpte.huge_page.present) {
             return null;
         }
-        
+
         // the pdpte may not map a huge page, but this is fine because relevant bits are in the same position
-        if(!pdpte.huge_page.read_write) {
+        if (!pdpte.huge_page.read_write) {
             res.flags.write = false;
         }
-        if(pdpte.huge_page.execute_disable) {
+        if (pdpte.huge_page.execute_disable) {
             res.flags.execute = false;
         }
-        if(!pdpte.huge_page.user) {
-            user = false;
+        if (!pdpte.huge_page.user) {
+            res.flags.user = false;
         }
         if (pdpte.isHugePage()) {
             // the offset in a 1gb page is composed of 3 fields from the VirtualAddress structure
-            res.physical_address =  (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
+            res.physical_address = (@as(u64, pdpte.huge_page.page) << 30) | (@as(u64, addr.directory) << 21) | (@as(u64, addr.table) << 12) | @as(u64, addr.page_offset);
             return res;
         } else {
             log.debug("using page directory at: 0x{x}\n", .{pdpte.page_directory.getPageDirectory()});
@@ -80,14 +80,14 @@ pub const CR3 = packed struct {
             }
 
             // the pd may not map a huge page, but this is fine because relevant bits are in the same position
-            if(!pde.huge_page.read_write) {
+            if (!pde.huge_page.read_write) {
                 res.flags.write = false;
             }
-            if(pde.huge_page.execute_disable) {
+            if (pde.huge_page.execute_disable) {
                 res.flags.execute = false;
             }
-            if(!pde.huge_page.user) {
-                user = false;
+            if (!pde.huge_page.user) {
+                res.flags.user = false;
             }
 
             if (pde.isHugePage()) {
@@ -101,14 +101,14 @@ pub const CR3 = packed struct {
                     return null;
                 }
 
-                if(!pte.read_write) {
+                if (!pte.read_write) {
                     res.flags.write = false;
                 }
-                if(pte.execute_disable) {
+                if (pte.execute_disable) {
                     res.flags.execute = false;
                 }
-                if(!pte.user) {
-                    user = false;
+                if (!pte.user) {
+                    res.flags.user = false;
                 }
                 res.physical_address = (@as(u64, pte.page) << 12) + addr.page_offset;
                 return res;
@@ -120,11 +120,11 @@ pub const CR3 = packed struct {
         var start_page = start;
         start_page.page_offset = 0;
         // TODO: handle overflow
-        var end_page = @bitCast(start.asU64() + length - 1);
+        var end_page: page_table.VirtualAddress = @bitCast(start.asU64() + length - 1);
         end_page.page_offset = 0;
-        while(start_page != end_page) : (start_page = @bitCast(start_page.asU64() += 0x1000)){
+        while (start_page != end_page) : (start_page = @bitCast(start_page.asU64() + 0x1000)) {
             if (self.translate(start_page, hhdm_offset)) |res| {
-                if((flags.write && !res.flags.write) || (flags.execute && !res.flags.execute) || (flags.user && !res.flags.user)) {
+                if ((flags.write and !res.flags.write) || (flags.execute and !res.flags.execute) || (flags.user and !res.flags.user)) {
                     return false;
                 }
             }

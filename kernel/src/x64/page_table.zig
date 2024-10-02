@@ -257,7 +257,7 @@ pub const VirtualAddress = packed struct {
         return @bitCast(self);
     }
     pub fn isHigherHalf(self: VirtualAddress) bool {
-        return pml4 >= 256;
+        return self.pml4 >= 256;
     }
 };
 
