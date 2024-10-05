@@ -58,8 +58,10 @@ var global_context: Context = .{};
 pub fn framebuffer_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_name = @tagName(scope);
     const level_name = level.asText();
+    global_context.lock.lock();
     try framebuffer_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
     try framebuffer_writer.print(format, args);
+    global_context.lock.unlock();
 }
 
 pub fn init(framebuffer: [*]u8, stride: u64, width: u64, height: u64) void {
@@ -79,7 +81,7 @@ pub fn init(framebuffer: [*]u8, stride: u64, width: u64, height: u64) void {
         .width = width,
         .height = height,
     };
-    global_context.lock.lock();
+    // global_context.lock.lock();
 }
 
 pub fn framebuffer_print(context: *Context, text: []const u8) WriteError!usize {

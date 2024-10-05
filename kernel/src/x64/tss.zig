@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Tss = extern struct {
+pub const Tss: type = extern struct {
     _1: u32 = 0,
     rsp: [3]u64 align(4) = [_]u64{ 0, 0, 0 },
     _2: u64 align(4) = 0,
@@ -10,12 +10,12 @@ pub const Tss = extern struct {
     iopb: u16 = 0,
 };
 
-pub const TssIopb = extern struct {
+pub const TssIopb: type = extern struct {
     tss: Tss = Tss{},
     iopb: u8 = 0xFF,
 };
 
-pub const TssDescriptorBottom = packed struct {
+pub const TssDescriptorBottom: type = packed struct {
     limit1: u16 = 0,
     base1: u16 = 0,
     base2: u8 = 0,
@@ -40,7 +40,7 @@ pub const TssDescriptorBottom = packed struct {
     }
 };
 
-pub const TssDescriptorTop = packed struct {
+pub const TssDescriptorTop: type = packed struct {
     base4: u32,
     _1: u32 = 0,
 };

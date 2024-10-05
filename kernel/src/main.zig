@@ -34,7 +34,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = serial_log.serial_log,
+    .logFn = framebuffer_log.framebuffer_log,
 };
 
 const log = std.log.scoped(.main);
@@ -69,7 +69,7 @@ pub const ThreadLocalState = struct {
     interrupt_rsp: u64,
 };
 
-const max_threads = 2;
+const max_threads = 12;
 
 pub var thread_local_states: [max_threads]ThreadLocalState = std.mem.zeroes([max_threads]ThreadLocalState);
 
@@ -133,7 +133,25 @@ export fn _start() callconv(.C) noreturn {
 
         // write the IDT, it is shared between all threads
         idt.writeIdt();
-        // const entries = memory_map_response.entries_ptr[0..memory_map_response.entry_count];
+
+        const bsp_id = smp_response.bsp_lapic_id;
+        log.info("bsp: {}\n", .{bsp_id});
+        // track which tls slots are used, start at 1 because 0 is reserved for the BSP
+        var i: usize = 1;
+        for (smp_response.cpus()) |cpu| {
+            if (i >= thread_local_states.len) {
+                log.err("insufficent TLS storage to start all processors, some processors will not be used!\n", .{});
+                break;
+            }
+            if (cpu.lapic_id != bsp_id) {
+                log.info("starting cpu: {} using tls slot {}\n", .{ cpu.lapic_id, i });
+                // TODO: right now this assumes that lapic_ids are continuous and start at zero, im not sure if that is correct though
+                cpu.extra_argument = @intFromPtr(&thread_local_states[i]);
+                cpu.goto_address = &thread_entry;
+                i += 1;
+            }
+        }
+        log.info("starting cpu: {} using tls slot {}\n", .{ bsp_id, 0 });
         main(&thread_local_states[0]);
     }
 
@@ -141,49 +159,53 @@ export fn _start() callconv(.C) noreturn {
     done();
 }
 
+fn thread_entry(smp_info: *limine.SmpInfo) callconv(.C) noreturn {
+    main(@ptrFromInt(smp_info.extra_argument));
+}
+
 fn main(tls: *ThreadLocalState) noreturn {
     // assert that GlobalState has been created
     var globals: *GlobalState = &(global_state orelse unreachable);
-    log.info("loading idt\n", .{});
-    log.info("IDT at: 0x{x}\n", .{@intFromPtr(&idt.IDT)});
+    log.debug("loading idt\n", .{});
+    log.debug("IDT at: 0x{x}\n", .{@intFromPtr(&idt.IDT)});
     idt.loadIdt();
     const new_stack2 = globals.frame_allocator.get().allocate_frame();
     globals.frame_allocator.release();
     // add 4096 to go to the top of the page
-    log.info("writing gdt\n", .{});
+    log.debug("writing gdt\n", .{});
     tss.writeTss(&tls.tss, new_stack2 + globals.hhdm_offset + 4096);
     gdt.writeGdt(&tls.gdt, &tls.tss);
 
-    log.info("loading gdt at 0x{x}\n", .{@intFromPtr(&tls.gdt)});
+    log.debug("loading gdt at 0x{x}\n", .{@intFromPtr(&tls.gdt)});
     gdt.loadGdt(&tls.gdtr, &tls.gdt);
 
-    log.info("setting efer\n", .{});
+    log.debug("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
     var efer: msr.Efer = msr.readEfer();
     efer.system_call_extensions = true;
     efer.no_execute_enable = true;
     msr.writeEfer(efer);
 
-    log.info("setting star\n", .{});
+    log.debug("setting star\n", .{});
     msr.writeStar(msr.Star{
         .kernel_cs_selector = gdt.kernel_star_segment_selector,
         .user_cs_selector = gdt.user_star_segment_selector,
     });
 
-    log.info("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
+    log.debug("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
     msr.writeLstar(@intFromPtr(&syscall_wrapper));
 
     msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
-    log.info("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
+    log.debug("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
 
-    log.info("deep copying page tables\n", .{});
+    log.debug("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
     const cr3 = reg.get_cr3();
     var new_cr3 = cr3.copy(globals.hhdm_offset, globals.frame_allocator.get());
     globals.frame_allocator.release();
     reg.set_cr3(@bitCast(new_cr3));
 
-    log.info("initializing APIC\n", .{});
+    log.debug("initializing APIC\n", .{});
 
     apic.init(globals.hhdm_offset, &new_cr3, globals.frame_allocator.get());
     globals.frame_allocator.release();
@@ -210,11 +232,11 @@ fn main(tls: *ThreadLocalState) noreturn {
     apic.write_divide_configuration(divide_config);
     apic.write_initial_count(0x1000_0000);
 
-    log.info("loading elf\n", .{});
-    const entry_point = elf.loadElf(&init_file, new_cr3, globals.hhdm_offset, globals.frame_allocator.get());
-    globals.frame_allocator.release();
+    log.debug("loading elf\n", .{});
+    // const entry_point = elf.loadElf(&init_file, new_cr3, globals.hhdm_offset, globals.frame_allocator.get());
+    // globals.frame_allocator.release();
 
-    log.info("creating user mode stack\n", .{});
+    log.debug("creating user mode stack\n", .{});
     const user_stack = globals.frame_allocator.get().allocate_frame();
     globals.frame_allocator.release();
     new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, globals.hhdm_offset, globals.frame_allocator.get(), .{
@@ -229,28 +251,29 @@ fn main(tls: *ThreadLocalState) noreturn {
     kernel_rsp = new_stack + globals.hhdm_offset;
     // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
 
-    var init_process: process.Process = .{
-        .cs = @as(u16, @bitCast(gdt.user_code_segment_selector)),
-        .ss = @as(u16, @bitCast(gdt.user_data_segment_selector)),
-        .rsp = 0x4000FF0,
-        .rflags = @bitCast(@as(u64, 0x202)),
-        .rip = entry_point,
-        .cr3 = new_cr3,
-        .rdi = 1,
-        .rsi = 2,
-        .rdx = 3,
-        .rcx = 4,
-        .r8 = 5,
-        .r9 = 6,
-    };
+    // var init_process: process.Process = .{
+    //     .cs = @as(u16, @bitCast(gdt.user_code_segment_selector)),
+    //     .ss = @as(u16, @bitCast(gdt.user_data_segment_selector)),
+    //     .rsp = 0x4000FF0,
+    //     .rflags = @bitCast(@as(u64, 0x202)),
+    //     .rip = entry_point,
+    //     .cr3 = new_cr3,
+    //     .rdi = 1,
+    //     .rsi = 2,
+    //     .rdx = 3,
+    //     .rcx = 4,
+    //     .r8 = 5,
+    //     .r9 = 6,
+    // };
 
-    acpi.apica_test();
+    // acpi.apica_test();
     // _ = acpica.AcpiInitializeSubsystem();
 
-    log.info("jumping to user mode\n", .{});
-    jump_to_user_mode(&init_process);
+    // log.info("jumping to user mode\n", .{});
+    // jump_to_user_mode(&init_process);
 
     log.info("done\n", .{});
+
     done();
 }
 

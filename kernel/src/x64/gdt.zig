@@ -228,16 +228,16 @@ pub fn loadGdt(gdtr: *volatile GdtDescriptor, gdt: *Gdt) void {
     gdtr.offset = @intFromPtr(gdt);
     gdtr.size = @sizeOf(Gdt) - 1;
     const x = @intFromPtr(gdtr);
-    log.info("loading gdtr at 0x{x}\n", .{x});
-    log.info("size: 0x{x}, offset: 0x{x}\n", .{ gdtr.size, gdtr.offset });
+    log.debug("loading gdtr at 0x{x}\n", .{x});
+    log.debug("size: 0x{x}, offset: 0x{x}\n", .{ gdtr.size, gdtr.offset });
     lgdt(x);
 
     setDataSegmentRegisters(kernel_data_segment_selector);
     setCodeSegmentRegisters(kernel_code_segment_selector, @intFromPtr(&set_code_segment_register_2));
 
-    log.info("flushing tss\n", .{});
+    log.debug("flushing tss\n", .{});
     flushTss(@bitCast(tss_segment_selector));
-    log.info("flushed tss\n", .{});
+    log.debug("flushed tss\n", .{});
 }
 
 extern fn lgdt(u64) callconv(.C) void;

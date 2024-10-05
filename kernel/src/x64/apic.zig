@@ -22,10 +22,10 @@ pub fn init(hhdm_offset: u64, cr3: *reg.CR3, frame_allocator: *pmm.FrameAllocato
     // x2apic = false;
     var apic_base = msr.readApicBase();
     if (x2apic) {
-        log.info("running in x2apic mode\n", .{});
+        log.debug("running in x2apic mode\n", .{});
         apic_base.enable_x2apic = true;
     } else {
-        log.info("running in xapic mode\n", .{});
+        log.debug("running in xapic mode\n", .{});
         const apic_virtaddr = paging.VirtualAddress{
             .sign_extension = 0xFFFF,
             .pml4 = 0x1FF,
@@ -34,7 +34,7 @@ pub fn init(hhdm_offset: u64, cr3: *reg.CR3, frame_allocator: *pmm.FrameAllocato
             .table = 0,
             .page_offset = 0,
         };
-        log.info("mapping apic to: 0x{x}\n", .{@as(u64, @bitCast(apic_virtaddr))});
+        log.debug("mapping apic to: 0x{x}\n", .{@as(u64, @bitCast(apic_virtaddr))});
         cr3.map(paging.Page{
             .four_kb = apic_virtaddr,
         }, @as(u64, apic_base.apic_base) << 12, hhdm_offset, frame_allocator, .{
@@ -63,7 +63,7 @@ pub fn read_local_apic_id() u32 {
     if (x2apic) {
         return @truncate(msr.readMsr(0x802));
     } else {
-        return apic_registers[2];
+        return apic_registers[2].contents;
     }
 }
 
@@ -305,7 +305,7 @@ pub fn write_initial_count(initial_count: u32) void {
 }
 
 const CURRENT_COUNT_INDEX: u32 = 0x839;
-fn read_current_count() u32 {
+pub fn read_current_count() u32 {
     return @truncate(msr.readMsr(CURRENT_COUNT_INDEX));
 }
 
