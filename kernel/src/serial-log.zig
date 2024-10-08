@@ -1,5 +1,6 @@
 const std = @import("std");
 const lock = @import("lock.zig");
+const apic = @import("x64/apic.zig");
 
 const Context = struct {
     mutex: lock.Lock = .{},
@@ -24,10 +25,14 @@ pub fn serial_log(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLi
         else => true,
     };
     if (b) {
-        global_context.mutex.lock();
+        if (level != std.log.Level.err) {
+            global_context.mutex.lock();
+        }
         try serial_writer.print("[{s}] ({s}): ", .{ level_name, scope_name });
         try serial_writer.print(format, args);
-        global_context.mutex.unlock();
+        if (level != std.log.Level.err) {
+            global_context.mutex.unlock();
+        }
     }
 }
 

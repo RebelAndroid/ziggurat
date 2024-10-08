@@ -29,7 +29,7 @@ run: $(IMAGE_NAME).iso
 
 .PHONY: run-uefi
 run-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS)
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS) -d int
 
 .PHONY: run-gdb-uefi
 run-gdb-uefi: ovmf $(IMAGE_NAME).iso
@@ -37,7 +37,7 @@ run-gdb-uefi: ovmf $(IMAGE_NAME).iso
 
 .PHONY: run-kvm-uefi
 run-kvm-uefi: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS) -enable-kvm	-cpu host -smp 12
+	qemu-system-x86_64 -M q35 -m 128M -bios ovmf/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d $(QEMU_FLAGS) -enable-kvm	-cpu host -smp 8
 	
 .PHONY: run-hdd
 run-hdd: $(IMAGE_NAME).hdd

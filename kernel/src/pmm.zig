@@ -3,6 +3,7 @@ const std = @import("std");
 pub const FrameAllocator = struct {
     front: u64 = 0,
     hhdm_offset: u64,
+    free_frame_count: u64 = 0,
     pub fn free_frames(self: *FrameAllocator, start: u64, size: u64) void {
         if (self.front == 0) {
             // linked list is empty
@@ -23,6 +24,7 @@ pub const FrameAllocator = struct {
             // add the new node to the front of the list
             self.front = start;
         }
+        self.free_frame_count += size;
     }
     /// Allocates a new frame, the frame is cleared before being returned
     pub fn allocate_frame(self: *FrameAllocator) u64 {
@@ -41,6 +43,8 @@ pub const FrameAllocator = struct {
 
         const out_ptr: *[4096]u8 = @ptrFromInt(out + self.hhdm_offset);
         @memset(out_ptr, 0);
+
+        self.free_frame_count -= 1;
 
         return out;
     }

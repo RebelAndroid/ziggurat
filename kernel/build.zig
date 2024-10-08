@@ -48,6 +48,10 @@ pub fn build(b: *std.Build) !void {
 
     kernel.addIncludePath(b.path("../acpica-unix-20240321/source/include"));
 
+    const options = b.addOptions();
+    options.addOption([]const u8, "version", "alpha 0.0.1");
+    kernel.root_module.addOptions("config", options);
+
     kernel.root_module.addImport("limine", limine.module("limine"));
     kernel.setLinkerScriptPath(std.Build.LazyPath{ .src_path = .{ .owner = b, .sub_path = "linker.ld" } });
 

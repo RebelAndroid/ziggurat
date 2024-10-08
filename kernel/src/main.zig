@@ -18,6 +18,8 @@ const apic = @import("x64/apic.zig");
 const acpica = @cImport(@cInclude("acpi.h"));
 const lock = @import("lock.zig");
 
+const config = @import("config");
+
 // The Limine requests can be placed anywhere, but it is important that
 // the compiler does not optimise them away, so, usually, they should
 // be made volatile or equivalent. In Zig, `export var` is what we use.
@@ -34,7 +36,7 @@ const init_file align(8) = @embedFile("init").*;
 
 pub const std_options = .{
     .log_level = .info,
-    .logFn = framebuffer_log.framebuffer_log,
+    .logFn = serial_log.serial_log,
 };
 
 const log = std.log.scoped(.main);
@@ -61,16 +63,17 @@ pub const GlobalState = struct {
     frame_allocator: lock.Mutex(pmm.FrameAllocator),
 };
 
-pub const ThreadLocalState = struct {
+pub const ThreadLocalState = extern struct {
+    /// A pointer to a stack used for handling syscalls
+    syscall_rsp: u64,
+    /// Where the user stack will be stored during a syscall
+    user_rsp: u64,
     gdt: gdt.Gdt,
     tss: tss.TssIopb,
     gdtr: gdt.GdtDescriptor,
-    syscall_rsp: u64,
-    interrupt_rsp: u64,
 };
 
 const max_threads = 12;
-
 pub var thread_local_states: [max_threads]ThreadLocalState = std.mem.zeroes([max_threads]ThreadLocalState);
 
 // The following will be our kernel's entry point.
@@ -113,6 +116,8 @@ export fn _start() callconv(.C) noreturn {
             done();
         };
 
+        log.info("Welcome to Ziggurat!\nVersion: {s}\n", .{config.version});
+
         log.info("number of processors: {}\n", .{smp_response.cpu_count});
 
         global_state = .{
@@ -122,14 +127,17 @@ export fn _start() callconv(.C) noreturn {
             }),
         };
 
-        var frame_allocator = global_state.?.frame_allocator.get();
-        for (memory_map_response.entries()) |e| {
-            if (e.kind != limine.MemoryMapEntryType.usable) {
-                continue;
+        {
+            var frame_allocator = global_state.?.frame_allocator.get();
+            defer global_state.?.frame_allocator.release();
+            for (memory_map_response.entries()) |e| {
+                if (e.kind != limine.MemoryMapEntryType.usable) {
+                    continue;
+                }
+                frame_allocator.free_frames(e.base, e.length / 0x1000);
             }
-            frame_allocator.free_frames(e.base, e.length / 0x1000);
+            log.info("free frames of memory: {} ({}MB)\n", .{ frame_allocator.free_frame_count, frame_allocator.free_frame_count / 256 });
         }
-        global_state.?.frame_allocator.release();
 
         // write the IDT, it is shared between all threads
         idt.writeIdt();
@@ -140,7 +148,7 @@ export fn _start() callconv(.C) noreturn {
         var i: usize = 1;
         for (smp_response.cpus()) |cpu| {
             if (i >= thread_local_states.len) {
-                log.err("insufficent TLS storage to start all processors, some processors will not be used!\n", .{});
+                log.err("insufficient TLS storage to start all processors, some processors will not be used!\n", .{});
                 break;
             }
             if (cpu.lapic_id != bsp_id) {
@@ -159,6 +167,29 @@ export fn _start() callconv(.C) noreturn {
     done();
 }
 
+fn getPage() u64 {
+    var globals: *GlobalState = &(global_state orelse unreachable);
+    const ret = globals.frame_allocator.get().allocate_frame();
+    globals.frame_allocator.release();
+    return ret;
+}
+
+fn loadGs(tls: *ThreadLocalState) void {
+    msr.writeKernelGsBase(@intFromPtr(tls));
+}
+
+fn setupGdt(globals: *GlobalState, tls: *ThreadLocalState) void {
+    // add 4096 to go to the top of the page
+    const new_stack2 = getPage() + globals.hhdm_offset + 4096;
+    log.debug("interrupt stack: 0x{x}\n", .{new_stack2});
+    log.debug("writing gdt\n", .{});
+    log.debug("loading tss at 0x{x}\n", .{@intFromPtr(&tls.tss)});
+    tss.writeTss(&tls.tss, new_stack2);
+    gdt.writeGdt(&tls.gdt, &tls.tss);
+    log.debug("loading gdt at 0x{x}\n", .{@intFromPtr(&tls.gdt)});
+    gdt.loadGdt(&tls.gdtr, &tls.gdt);
+}
+
 fn thread_entry(smp_info: *limine.SmpInfo) callconv(.C) noreturn {
     main(@ptrFromInt(smp_info.extra_argument));
 }
@@ -169,15 +200,7 @@ fn main(tls: *ThreadLocalState) noreturn {
     log.debug("loading idt\n", .{});
     log.debug("IDT at: 0x{x}\n", .{@intFromPtr(&idt.IDT)});
     idt.loadIdt();
-    const new_stack2 = globals.frame_allocator.get().allocate_frame();
-    globals.frame_allocator.release();
-    // add 4096 to go to the top of the page
-    log.debug("writing gdt\n", .{});
-    tss.writeTss(&tls.tss, new_stack2 + globals.hhdm_offset + 4096);
-    gdt.writeGdt(&tls.gdt, &tls.tss);
-
-    log.debug("loading gdt at 0x{x}\n", .{@intFromPtr(&tls.gdt)});
-    gdt.loadGdt(&tls.gdtr, &tls.gdt);
+    setupGdt(globals, tls);
 
     log.debug("setting efer\n", .{});
     // enable system call extensions, we will use syscall/sysret to handle system calls and will also enter user mode using sysret
@@ -195,8 +218,10 @@ fn main(tls: *ThreadLocalState) noreturn {
     log.debug("loading syscall handler at: 0x{x}\n", .{@intFromPtr(&syscall_wrapper)});
     msr.writeLstar(@intFromPtr(&syscall_wrapper));
 
-    msr.writeKernelGsBase(@intFromPtr(&kernel_rsp));
-    log.debug("loading gs base: 0x{x}\n", .{@intFromPtr(&kernel_rsp)});
+    // mask interrupt flag on syscalls
+    msr.writeFmask(.{ .interrupt_enable = true });
+
+    loadGs(tls);
 
     log.debug("deep copying page tables\n", .{});
     // make a deep copy of the page tables, this is necessary to free bootloader reclaimable memory
@@ -212,7 +237,7 @@ fn main(tls: *ThreadLocalState) noreturn {
 
     apic.write_spurious_interrupt(apic.SpuriousInterruptVectorRegister{
         .vector = 0xFF,
-        .eoi_broadcast_supression = false,
+        .eoi_broadcast_suppression = false,
         .focus_processor_checking = false,
         .apic_software_enable = true,
     });
@@ -232,13 +257,15 @@ fn main(tls: *ThreadLocalState) noreturn {
     apic.write_divide_configuration(divide_config);
     apic.write_initial_count(0x1000_0000);
 
+    // enable interrupts
+    // asm volatile ("sti");
+
     log.debug("loading elf\n", .{});
-    // const entry_point = elf.loadElf(&init_file, new_cr3, globals.hhdm_offset, globals.frame_allocator.get());
-    // globals.frame_allocator.release();
+    const entry_point = elf.loadElf(&init_file, new_cr3, globals.hhdm_offset, globals.frame_allocator.get());
+    globals.frame_allocator.release();
 
     log.debug("creating user mode stack\n", .{});
-    const user_stack = globals.frame_allocator.get().allocate_frame();
-    globals.frame_allocator.release();
+    const user_stack = getPage();
     new_cr3.map(.{ .four_kb = @bitCast(@as(u64, 0x4000000)) }, user_stack, globals.hhdm_offset, globals.frame_allocator.get(), .{
         .execute = false,
         .write = true,
@@ -246,34 +273,34 @@ fn main(tls: *ThreadLocalState) noreturn {
     }) catch unreachable;
     globals.frame_allocator.release();
 
-    const new_stack = globals.frame_allocator.get().allocate_frame();
-    globals.frame_allocator.release();
-    kernel_rsp = new_stack + globals.hhdm_offset;
-    // log.info("syscall rsp: 0x{x}\n", .{kernel_rsp});
+    const new_stack = getPage();
+    tls.syscall_rsp = new_stack + globals.hhdm_offset;
+    log.info("({}) syscall rsp: 0x{x}\n", .{ apic.read_local_apic_id(), tls.syscall_rsp });
 
-    // var init_process: process.Process = .{
-    //     .cs = @as(u16, @bitCast(gdt.user_code_segment_selector)),
-    //     .ss = @as(u16, @bitCast(gdt.user_data_segment_selector)),
-    //     .rsp = 0x4000FF0,
-    //     .rflags = @bitCast(@as(u64, 0x202)),
-    //     .rip = entry_point,
-    //     .cr3 = new_cr3,
-    //     .rdi = 1,
-    //     .rsi = 2,
-    //     .rdx = 3,
-    //     .rcx = 4,
-    //     .r8 = 5,
-    //     .r9 = 6,
-    // };
+    var init_process: process.Process = .{
+        .cs = @as(u16, @bitCast(gdt.user_code_segment_selector)),
+        .ss = @as(u16, @bitCast(gdt.user_data_segment_selector)),
+        .rsp = 0x4000FF0,
+        .rflags = @bitCast(@as(u64, 0x202)),
+        .rip = entry_point,
+        .cr3 = new_cr3,
+        .rdi = 1,
+        .rsi = 2,
+        .rdx = 3,
+        .rcx = 4,
+        .r8 = 5,
+        .r9 = 6,
+    };
 
     // acpi.apica_test();
     // _ = acpica.AcpiInitializeSubsystem();
 
-    // log.info("jumping to user mode\n", .{});
-    // jump_to_user_mode(&init_process);
+    // if (apic.read_local_apic_id() == 0) {
+    log.info("jumping to user mode\n", .{});
+    jump_to_user_mode(&init_process);
+    // }
 
-    log.info("done\n", .{});
-
+    log.info("done on {}\n", .{apic.read_local_apic_id()});
     done();
 }
 
@@ -311,10 +338,6 @@ comptime {
     );
 }
 
-/// Data that will be stored in the gs segment.
-/// The stack pointer loaded by the syscall handler.
-pub var kernel_rsp: u64 align(4096) = 0;
-
 // when syscall is executed, the return address is saved into rcx and rflags is saved into r11
 pub extern fn syscall_wrapper() callconv(.Naked) void;
 comptime {
@@ -350,6 +373,6 @@ comptime {
 }
 
 pub export fn syscall_handler(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) callconv(.C) u64 {
-    log.info("Syscall!\n rdi: 0x{x}, rsi: 0x{x}, rdx: 0x{x}, rcx: 0x{x}, r8: 0x{}, r9: 0x{}\n", .{ rdi, rsi, rdx, rcx, r8, r9 });
+    log.info("({}) Syscall!\n rdi: 0x{x}, rsi: 0x{x}, rdx: 0x{x}, rcx: 0x{x}, r8: 0x{}, r9: 0x{}\n", .{ apic.read_local_apic_id(), rdi, rsi, rdx, rcx, r8, r9 });
     return 0;
 }

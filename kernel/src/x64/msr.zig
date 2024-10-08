@@ -1,5 +1,6 @@
 const std = @import("std");
 const gdt = @import("gdt.zig");
+const reg = @import("registers.zig");
 
 pub extern fn readMsr(msr: u32) callconv(.C) u64;
 comptime {
@@ -81,12 +82,12 @@ pub fn writeLstar(lstar: u64) void {
 
 const FMASK_INDEX: u32 = 0xC0000084;
 /// IA32_FMASK controls rflags
-pub fn readFmask() u64 {
+pub fn readFmask() reg.Rflags {
     return @bitCast(readMsr(FMASK_INDEX));
 }
 
 /// IA32_FMASK controls rflags
-pub fn writeFmask(fmask: u64) void {
+pub fn writeFmask(fmask: reg.Rflags) void {
     writeMsr(FMASK_INDEX, @bitCast(fmask));
 }
 

@@ -19,7 +19,6 @@ var apic_registers: [*]volatile apic_register = @ptrFromInt(0x10);
 
 pub fn init(hhdm_offset: u64, cr3: *reg.CR3, frame_allocator: *pmm.FrameAllocator) void {
     x2apic = cpuid.get_feature_information().x2apic;
-    // x2apic = false;
     var apic_base = msr.readApicBase();
     if (x2apic) {
         log.debug("running in x2apic mode\n", .{});
@@ -110,7 +109,7 @@ pub const SpuriousInterruptVectorRegister = packed struct {
     apic_software_enable: bool,
     focus_processor_checking: bool,
     _1: u2 = 0,
-    eoi_broadcast_supression: bool,
+    eoi_broadcast_suppression: bool,
     _2: u19 = 0,
 };
 
@@ -127,7 +126,6 @@ pub fn write_spurious_interrupt(spurious_interrupt: SpuriousInterruptVectorRegis
     if (x2apic) {
         msr.writeMsr(SPURIOUS_INTERRUPT_MSR, @as(u32, @bitCast(spurious_interrupt)));
     } else {
-        log.info("writing spurious interrupt at: 0x{x}\n", .{@as(u64, @intFromPtr(&apic_registers[SPURIOUS_INTERRUPT_INDEX]))});
         apic_registers[SPURIOUS_INTERRUPT_INDEX].contents = @bitCast(spurious_interrupt);
     }
 }

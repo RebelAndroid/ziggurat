@@ -56,3 +56,8 @@ pub export fn _start(rdi: u64, rsi: u64, rdx: u64, rcx: u64, r8: u64, r9: u64) c
     _ = syscall(7, 8, 9, 10, 11, 12);
     while (true) {}
 }
+
+// pub export fn _start() callconv(.C) noreturn {
+//     _ = syscall(7, 8, 9, 10, 11, 12);
+//     while (true) {}
+// }
